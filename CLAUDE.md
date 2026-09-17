@@ -15,7 +15,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 
 ### Business rules to honor when building those modules
 
-- Registration (name, email, phone, city) is required only for *active* interactions (requesting collection, logging a disposal, gamification). **Public map browsing and educational content must never require login.**
+- Registration (name, email, phone, city) is required only for _active_ interactions (requesting collection, logging a disposal, gamification). **Public map browsing and educational content must never require login.**
 - A collection point is invisible on the map until an `ADMIN` approves it (checks address, accepted waste types, hours, contact info).
 - A collection point must have valid GPS coordinates or a verifiable full address — reject registration without one.
 - A collection point must declare its accepted waste categories from a standard taxonomy (min. set: plastic, paper, metals, glass, used cooking oil, general electronics, batteries, cell phones, computers, printers, televisions). No categories → cannot be approved.
@@ -35,11 +35,18 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npx tsc --noEmit` — type-check only, no output (fastest way to verify changes compile)
 - `npx prisma generate` — regenerate the Prisma client after editing `prisma/schema.prisma` (required — it is not run automatically on install)
 - `npx prisma migrate dev --name <name>` — create/apply a migration against `DATABASE_URL`
+- `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
+- `npm run format` / `npm run format:check` — Prettier
 - No test runner is configured yet (`npm test` is a placeholder). The project docs call for Jest — not set up in this repo yet.
+
+### Lint/format enforcement (Husky + lint-staged)
+
+`npm install` runs the `prepare` script, which activates Husky and points `core.hooksPath` at `.husky/`. The `.husky/pre-commit` hook runs `npx lint-staged`, which applies `eslint --fix` + `prettier --write` (see the `lint-staged` key in `package.json`) only to staged files — auto-fixable issues get silently corrected and re-staged, but a real lint error (e.g. an unused variable) blocks the commit until fixed by hand. `eslint.config.js` scopes `typescript-eslint`'s recommended rules to `**/*.ts` only (via the `extends`-inside-`files` pattern) so the flat-config file itself and other non-TS files aren't linted with TS-specific rules; `src/generated/**` and `dist/**` are excluded entirely.
 
 ## Current implementation (this repo)
 
 Express 5 + TypeScript API, organized as **Clean Architecture applied per feature module**, not as global top-level layers. Each business feature under `src/modules/<name>/` has its own:
+
 - `domain/` — entities, repository interfaces, use-cases (framework-agnostic business logic)
 - `infra/` — concrete implementations (Prisma repositories, external HTTP clients)
 - `presentation/` — Express routes/controllers, Zod validators
@@ -79,6 +86,7 @@ The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adap
 ## Target architecture (per project docs — beyond this repo)
 
 This repo is only the `API Backend` container in the project's C4 model. The documented full system also includes, elsewhere (separate repos, presumably):
+
 - **Web app**: Next.js (App Router) + Tailwind CSS — admin/institutional panel.
 - **Mobile app**: React Native + NativeWind + Expo (Managed Workflow) — end-user (citizen/collector) app.
 - **Push notifications**: Expo Push API (delivers via APNs/FCM).

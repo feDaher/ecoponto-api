@@ -35,7 +35,12 @@ export class RegisterUserUseCase {
         role,
       });
     } catch (error) {
-      if (error && typeof error === "object" && "code" in error && error.code === "auth/email-already-exists") {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "auth/email-already-exists"
+      ) {
         throw new AppError("Email already registered", 409);
       }
 

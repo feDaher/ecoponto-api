@@ -7,7 +7,12 @@ export function validate<T extends ZodType>(schema: T) {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      next(new AppError(`Validation error: ${result.error.issues.map((issue) => issue.message).join(", ")}`, 400));
+      next(
+        new AppError(
+          `Validation error: ${result.error.issues.map((issue) => issue.message).join(", ")}`,
+          400,
+        ),
+      );
       return;
     }
 
