@@ -1,0 +1,96 @@
+# ==============================
+# Dependencies
+# ==============================
+node_modules/
+
+# ==============================
+# Environment / Secrets
+# ==============================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Permitir exemplos de variáveis
+!.env.example
+
+# ==============================
+# Build
+# ==============================
+dist/
+build/
+out/
+
+# ==============================
+# Prisma
+# ==============================
+generated/
+
+# ==============================
+# Logs
+# ==============================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================
+# Test / Coverage
+# ==============================
+coverage/
+.nyc_output/
+
+# ==============================
+# TypeScript
+# ==============================
+*.tsbuildinfo
+
+# ==============================
+# Runtime
+# ==============================
+*.pid
+*.seed
+*.pid.lock
+
+# ==============================
+# OS
+# ==============================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ==============================
+# Editor / IDE
+# ==============================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.idea/
+*.swp
+*.swo
+
+# ==============================
+# Temporary files
+# ==============================
+tmp/
+temp/
+*.tmp
+
+# ==============================
+# Local certificates / keys
+# ==============================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.agents/
+*.claude/
+*.windsurf/
