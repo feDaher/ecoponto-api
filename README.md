@@ -39,21 +39,19 @@ Isso baixa tudo que está listado no `package.json` (Express, Prisma, Firebase A
 
 ## 4. Subir um banco MySQL
 
-Se você optou por Docker, rode:
+O jeito recomendado é usar o `docker-compose.yml` que já está na raiz do projeto — ele sobe um MySQL com o banco, usuário e senha já criados, com os dados persistidos num volume (não se perdem se você desligar o container).
 
 ```bash
-docker run --name ecoponto-mysql \
-  -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=ecoponto \
-  -e MYSQL_USER=ecoponto_app \
-  -e MYSQL_PASSWORD=SENHA \
-  -p 3306:3306 \
-  -d mysql:8
+npm run db:up
 ```
 
-Isso cria um banco `ecoponto` acessível em `localhost:3306`, com usuário `ecoponto_app` e senha `SENHA` (você pode trocar esses valores, só lembre de refletir a troca no `.env` do passo 6).
+Esse comando (`docker compose up -d --wait`) só retorna depois que o MySQL estiver de pé e respondendo — não precisa adivinhar quanto tempo esperar. Pra ver os logs, `npm run db:logs`; pra derrubar, `npm run db:down`.
 
-Se preferir MySQL instalado localmente, crie o banco e o usuário manualmente com essas mesmas credenciais (ou outras de sua escolha) usando o MySQL Workbench ou a linha de comando.
+As credenciais já vêm prontas no `docker-compose.yml`: banco `ecoponto`, usuário `ecoponto_app`, senha `SENHA`, porta `3306` (se você mudar algum desses valores no `docker-compose.yml`, reflita a mudança no `DATABASE_URL` do `.env` no passo 6).
+
+> **Porta 3306 já em uso?** Se você tiver um MySQL local rodando na mesma porta, o `db:up` vai falhar. Troque o mapeamento de porta no `docker-compose.yml` (ex: `"3307:3306"`) e ajuste a porta no `DATABASE_URL`.
+
+Se preferir MySQL instalado localmente (sem Docker), crie o banco e o usuário manualmente com essas mesmas credenciais (ou outras de sua escolha) usando o MySQL Workbench ou a linha de comando.
 
 ## 5. Criar um projeto Firebase
 
@@ -106,7 +104,7 @@ npx prisma migrate dev --name init
 - `prisma generate` cria o cliente Prisma (código TypeScript que a API usa para falar com o banco) dentro de `src/generated/`. Precisa ser rodado toda vez que o arquivo `prisma/schema.prisma` mudar.
 - `prisma migrate dev` cria as tabelas de verdade no MySQL a partir do schema.
 
-Se der erro de conexão aqui, revise o `DATABASE_URL` e confirme que o container/serviço do MySQL está rodando (`docker ps`, no caso do Docker).
+Se der erro de conexão aqui, revise o `DATABASE_URL` e confirme que o container do MySQL está rodando (`docker compose ps`, no caso do Docker).
 
 ## 8. Rodar a API
 
@@ -154,6 +152,10 @@ Para testar o fluxo de cadastro e login, veja os exemplos de `curl` em [CLAUDE.m
 | `npm run lint:fix`                     | Verifica e corrige automaticamente o que der pra corrigir                        |
 | `npm run format`                       | Formata todo o código com Prettier                                               |
 | `npm run format:check`                 | Só verifica a formatação, sem alterar nada                                       |
+| `npm run db:up`                        | Sobe o MySQL via Docker Compose e espera ele ficar saudável                      |
+| `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                         |
+| `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                            |
+| `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                  |
 
 ## Padronização de código (ESLint + Prettier + Husky)
 
@@ -167,6 +169,8 @@ Isso já é configurado sozinho quando você roda `npm install` (o script `prepa
 ## Problemas comuns
 
 - **`Invalid environment variables`** ao rodar `npm run dev`: alguma variável do `.env` está faltando ou vazia. Confira o passo 6.
-- **Erro de conexão com o MySQL**: confirme que o banco está rodando (`docker ps`) e que usuário/senha/porta no `DATABASE_URL` batem com os do banco.
+- **Erro de conexão com o MySQL**: confirme que o container está rodando e saudável (`docker compose ps`) e que usuário/senha/porta no `DATABASE_URL` batem com os do `docker-compose.yml`.
+- **`npm run db:up` falha ou a porta 3306 já está em uso**: você provavelmente tem outro MySQL rodando na mesma porta. Veja a nota na seção 4 sobre trocar a porta.
+- **`prisma migrate dev` dá erro de conexão logo depois do `db:up`**: raríssimo (o `--wait` já garante que o healthcheck passou), mas se acontecer, rode `docker compose logs mysql` pra ver se ele terminou de inicializar, espere alguns segundos e tente de novo.
 - **`prisma generate` não roda automaticamente**: é esperado — sempre que puxar código novo (`git pull`) que tenha mudado o `prisma/schema.prisma`, rode `npx prisma generate` de novo antes de `npm run dev`.
 - **Erro ao chamar `/auth/register` ou `/auth/login`**: confira se o provedor **E-mail/senha** está mesmo habilitado no Firebase (passo 5.2) e se as credenciais no `.env` são do projeto certo.

@@ -11,6 +11,10 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f mysql",
+    "db:reset": "docker compose down -v && docker compose up -d --wait",
     "prepare": "husky",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

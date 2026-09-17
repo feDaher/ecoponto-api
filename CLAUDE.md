@@ -73,7 +73,11 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 
 `prisma/schema.prisma` uses the newer `prisma-client` generator (TypeScript source, not the classic `@prisma/client` codegen), with `output = "../src/generated/prisma"`. It **must** be generated inside `src/`, not at the project root — `tsconfig.json` has `rootDir: "src"` + `include: ["src/**/*"]`, and since the generated files are plain `.ts` that gets compiled with the rest of the app (imported via relative paths, e.g. `src/config/prisma.ts`), anything outside `src` would fail with TS6059 (`rootDir` violation). `src/generated/` is gitignored (matched by the `generated/` rule) and regenerated via `npx prisma generate`.
 
-The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter (`PrismaMariaDb(env.DATABASE_URL)`), not the classic connection-string-in-schema approach — see `src/config/prisma.ts`.
+The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter (`PrismaMariaDb(env.DATABASE_URL)`), not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
+
+### Local database (`docker-compose.yml`)
+
+`npm run db:up` (`docker compose up -d --wait`) starts a single MySQL container with the database/user/password already baked into the compose file's `environment` block (matching the example `DATABASE_URL` in `.env.example`) and data persisted in the `ecoponto_mysql_data` named volume. The `--wait` flag blocks until the container's healthcheck (`mysqladmin ping`) passes, so there's no race with `prisma migrate dev` running before the server is ready. `npm run db:reset` drops the volume (all data) and recreates it — destructive, dev-only.
 
 ### Config (`src/config/`)
 
