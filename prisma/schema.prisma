@@ -18,14 +18,66 @@ enum Role {
   ADMIN
 }
 
+enum StatusPonto {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique
+  id          String @id @default(uuid())
+  firebaseUid String @unique
   name        String
-  email       String   @unique
+  email       String @unique
   phone       String
   city        String
-  role        Role     @default(CITIZEN)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  role        Role   @default(CITIZEN)
+
+  pontosCriados   PontoColeta[] @relation("PontosCriados")
+  pontosAprovados PontoColeta[] @relation("PontosAprovados")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CategoriaResiduo {
+  id    String  @id @default(uuid())
+  nome  String  @unique
+  ativo Boolean @default(true)
+
+  pontos PontoCategoria[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PontoColeta {
+  id       String      @id @default(uuid())
+  nome     String
+  endereco String
+  cidade   String
+  status   StatusPonto @default(PENDING)
+
+  criadoPorId String
+  criadoPor   User   @relation("PontosCriados", fields: [criadoPorId], references: [id])
+
+  aprovadoPorId String?
+  aprovadoPor   User?   @relation("PontosAprovados", fields: [aprovadoPorId], references: [id])
+
+  aprovadoEm DateTime?
+
+  categorias PontoCategoria[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PontoCategoria {
+  pontoId     String
+  categoriaId String
+
+  ponto     PontoColeta      @relation(fields: [pontoId], references: [id])
+  categoria CategoriaResiduo @relation(fields: [categoriaId], references: [id])
+
+  @@id([pontoId, categoriaId])
 }
