@@ -106,6 +106,48 @@ npx prisma migrate dev --name init
 
 Se der erro de conexão aqui, revise o `DATABASE_URL` e confirme que o container do MySQL está rodando (`docker compose ps`, no caso do Docker).
 
+### 7.1 Criando novas migrations (dia a dia)
+
+Toda mudança de estrutura do banco (nova tabela, nova coluna, novo índice, etc.) segue este fluxo:
+
+1. Edite o `prisma/schema.prisma` (ex: adicione um `model CollectionPoint { ... }` ou um campo novo em `User`).
+2. Gere e aplique a migration com um nome descritivo, em `snake_case`:
+   ```bash
+   npm run db:migrate -- --name add_collection_points
+   ```
+   Isso cria a pasta `prisma/migrations/<timestamp>_add_collection_points/migration.sql`, aplica o SQL no seu banco local e já roda o `prisma generate`.
+3. Confira o SQL gerado em `migration.sql` antes de commitar.
+4. **Commite a pasta da migration junto com o `schema.prisma`**. As migrations são o histórico do banco e todo mundo do time aplica as mesmas.
+
+Regras importantes:
+
+- **Nunca edite nem apague uma migration que já foi commitada/aplicada.** Se errou, crie uma nova migration corrigindo.
+- Depois de um `git pull` que trouxe migrations novas, rode `npm run db:migrate` (sem `--name`) para aplicá-las no seu banco local.
+- `npm run db:migrate:status` mostra quais migrations já foram aplicadas.
+- Em produção/homologação use `npm run db:migrate:deploy`. Ele só aplica as migrations pendentes, sem gerar novas e sem shadow database.
+- Se o banco local ficar inconsistente, `npx prisma migrate reset` apaga os dados e reaplica todas as migrations do zero (só em desenvolvimento).
+
+> O `prisma migrate dev` cria um banco temporário ("shadow database") para validar as migrations. Por isso o `docker/mysql/init/01-grant-app-user.sql` dá ao usuário `ecoponto_app` permissão para criar bancos. Esse script só roda na **primeira** vez que o volume é criado. Se o seu container é anterior a ele e você receber o erro `P3014`, rode `npm run db:reset` (apaga os dados locais).
+
+### 7.2 Visualizar o banco no DBeaver
+
+1. Com o container rodando (`npm run db:up`), abra o DBeaver e clique em **Nova conexão** (ícone de tomada com `+`) → **MySQL** → **Avançar**.
+2. Preencha a aba **Principal**:
+   | Campo    | Valor          |
+   | -------- | -------------- |
+   | Host     | `localhost`    |
+   | Porta    | `3306`         |
+   | Database | `ecoponto`     |
+   | Usuário  | `ecoponto_app` |
+   | Senha    | `SENHA`        |
+3. Na aba **Propriedades do driver**, ajuste (necessário para o MySQL 8, que não usa SSL neste container):
+   - `allowPublicKeyRetrieval` = `true`
+   - `useSSL` = `false`
+4. Clique em **Testar conexão**. Na primeira vez o DBeaver pede para baixar o driver JDBC do MySQL: aceite.
+5. **Concluir**. As tabelas ficam em `ecoponto → Databases → ecoponto → Tables` (`User` e `_prisma_migrations`, que é a tabela de controle do Prisma e não deve ser editada à mão).
+
+Se quiser acesso total (ver/criar outros bancos), use o usuário `root` / senha `root`.
+
 ## 8. Rodar a API
 
 ```bash
@@ -156,6 +198,11 @@ Para testar o fluxo de cadastro e login, veja os exemplos de `curl` em [CLAUDE.m
 | `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                         |
 | `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                            |
 | `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                  |
+| `npm run db:migrate -- --name <nome>`  | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)            |
+| `npm run db:migrate:status`            | Mostra quais migrations já foram aplicadas no banco                              |
+| `npm run db:migrate:deploy`            | Aplica migrations pendentes em produção (sem criar novas)                        |
+| `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                  |
+| `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                    |
 
 ## Padronização de código (ESLint + Prettier + Husky)
 
