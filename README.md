@@ -6,6 +6,20 @@ Este guia parte do zero: clonar o projeto, instalar tudo que ele precisa e rodar
 
 > Para entender a arquitetura, as regras de negócio e as decisões técnicas do projeto, veja o [CLAUDE.md](CLAUDE.md) depois de concluir este setup.
 
+### Resumo (para quem já tem tudo instalado)
+
+```bash
+git clone https://github.com/feDaher/ecoponto-api.git
+cd ecoponto-api
+npm install
+cp .env.example .env      # cole as credenciais do Firebase recebidas do orientador (passo 5)
+npm run db:up             # sobe o MySQL no Docker
+npx prisma generate       # gera o cliente Prisma
+npm run db:migrate        # cria as tabelas
+npm run db:seed           # cria as contas de teste (admin, coletor, cidadão)
+npm run dev               # http://localhost:3333/docs
+```
+
 ## 1. Pré-requisitos
 
 Instale, na ordem:
@@ -19,8 +33,7 @@ Instale, na ordem:
 3. **Um servidor MySQL** — escolha uma das opções:
    - **Docker** (mais rápido, recomendado): [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
    - **MySQL instalado localmente**: [dev.mysql.com/downloads/installer](https://dev.mysql.com/downloads/installer/)
-4. **Uma conta Google** para criar um projeto Firebase (gratuito) — usado para login/cadastro.
-5. Um editor de código, como o [VS Code](https://code.visualstudio.com/).
+4. Um editor de código, como o [VS Code](https://code.visualstudio.com/).
 
 ## 2. Clonar o repositório
 
@@ -53,22 +66,24 @@ As credenciais já vêm prontas no `docker-compose.yml`: banco `ecoponto`, usuá
 
 Se preferir MySQL instalado localmente (sem Docker), crie o banco e o usuário manualmente com essas mesmas credenciais (ou outras de sua escolha) usando o MySQL Workbench ou a linha de comando.
 
-## 5. Criar um projeto Firebase
+## 5. Credenciais do Firebase (compartilhadas pela turma)
 
-O EcoPonto usa o Firebase só para autenticação (cadastro/login) — não precisa de nenhum plano pago.
+O EcoPonto usa o Firebase só para autenticação (cadastro/login). **Você não precisa criar um projeto Firebase**: a turma inteira usa o projeto de desenvolvimento do orientador, e as credenciais dele são entregues **por canal privado** (nunca pelo repositório).
 
-1. Acesse [console.firebase.google.com](https://console.firebase.google.com/) e clique em **Criar projeto** (pode desativar o Google Analytics, não é necessário).
-2. No menu lateral, vá em **Compilação → Authentication → Sign-in method** e habilite o provedor **E-mail/senha**.
-3. Vá em **Configurações do projeto** (ícone de engrenagem) → aba **Contas de serviço** → **Gerar nova chave privada**. Isso baixa um arquivo `.json` parecido com:
-   ```json
-   {
-     "project_id": "seu-projeto-id",
-     "client_email": "firebase-adminsdk-xxxxx@seu-projeto-id.iam.gserviceaccount.com",
-     "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-   }
-   ```
-   Guarde esse arquivo — você vai usar os três campos acima no passo 6. **Nunca suba esse arquivo pro Git.**
-4. Ainda em **Configurações do projeto**, na aba **Geral**, copie a **Chave de API da Web** (Web API Key) — é diferente da chave privada do passo anterior.
+Você vai receber quatro valores:
+
+| Variável                | O que é                                                                |
+| ----------------------- | ---------------------------------------------------------------------- |
+| `FIREBASE_PROJECT_ID`   | ID do projeto Firebase                                                 |
+| `FIREBASE_CLIENT_EMAIL` | E-mail da conta de serviço (Admin SDK)                                 |
+| `FIREBASE_PRIVATE_KEY`  | Chave privada da conta de serviço — **dá acesso administrativo total** |
+| `FIREBASE_API_KEY`      | Chave de API da Web, usada no login (diferente da chave privada)       |
+
+Regras de segurança:
+
+- **Nunca commite o `.env`** (ele já está no `.gitignore`), nem cole essas credenciais em issues, prints, grupos públicos ou ferramentas online.
+- Não altere nada no console do Firebase: o projeto é o mesmo para todos.
+- Se suspeitar que a chave vazou, avise o orientador para que ela seja trocada.
 
 ## 6. Configurar as variáveis de ambiente
 
@@ -84,25 +99,24 @@ Abra o `.env` criado e preencha:
 DATABASE_URL="mysql://ecoponto_app:SENHA@localhost:3306/ecoponto"
 PORT=3333
 
-FIREBASE_PROJECT_ID=seu-projeto-id
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@seu-projeto-id.iam.gserviceaccount.com
+FIREBASE_PROJECT_ID="id-recebido"
+FIREBASE_CLIENT_EMAIL="email-recebido"
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-FIREBASE_API_KEY=sua-web-api-key
+FIREBASE_API_KEY="chave-recebida"
 ```
 
-- `DATABASE_URL` deve bater com o usuário/senha/porta/nome do banco que você criou no passo 4.
-- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` e `FIREBASE_PRIVATE_KEY` vêm do JSON baixado no passo 5.3 (mantenha a `private_key` entre aspas, exatamente como veio no JSON, com os `\n`).
-- `FIREBASE_API_KEY` vem do passo 5.4.
+- `DATABASE_URL` já vem certo para o MySQL do Docker (passo 4). Só mude se alterou usuário/senha/porta no `docker-compose.yml`.
+- Mantenha a `FIREBASE_PRIVATE_KEY` **entre aspas e numa linha só**, com os `\n` literais, exatamente como foi recebida.
 
 ## 7. Criar as tabelas no banco (Prisma)
 
 ```bash
 npx prisma generate
-npx prisma migrate dev --name init
+npm run db:migrate
 ```
 
 - `prisma generate` cria o cliente Prisma (código TypeScript que a API usa para falar com o banco) dentro de `src/generated/`. Precisa ser rodado toda vez que o arquivo `prisma/schema.prisma` mudar.
-- `prisma migrate dev` cria as tabelas de verdade no MySQL a partir do schema.
+- `npm run db:migrate` aplica no seu MySQL as migrations que já estão em `prisma/migrations/` (cria as tabelas). Não passe `--name` aqui: isso só é usado quando você mesmo muda o schema (veja 7.1).
 
 Se der erro de conexão aqui, revise o `DATABASE_URL` e confirme que o container do MySQL está rodando (`docker compose ps`, no caso do Docker).
 
@@ -148,7 +162,27 @@ Regras importantes:
 
 Se quiser acesso total (ver/criar outros bancos), use o usuário `root` / senha `root`.
 
-## 8. Rodar a API
+## 8. Popular o banco com as contas de teste (seed)
+
+```bash
+npm run db:seed
+```
+
+Cria no seu MySQL local três usuários, um para cada perfil:
+
+| Perfil    | E-mail                 | Senha          |
+| --------- | ---------------------- | -------------- |
+| ADMIN     | `admin@ecoponto.dev`   | `Ecoponto@123` |
+| COLLECTOR | `coletor@ecoponto.dev` | `Ecoponto@123` |
+| CITIZEN   | `cidadao@ecoponto.dev` | `Ecoponto@123` |
+
+Como funciona:
+
+- As contas **já existem no Firebase compartilhado** (foram criadas pelo orientador). O seed só busca o `uid` de cada uma no Firebase e cria/atualiza a linha correspondente na tabela `User` do seu banco. Ele **não altera** senha nem dados das contas no Firebase, então rodar o seed não afeta os colegas.
+- Pode rodar quantas vezes quiser. Depois de um `npm run db:reset`, rode `db:migrate` e `db:seed` de novo.
+- Essas são as únicas contas que funcionam igual em todos os ambientes. Use-as para testar os três perfis (é a única forma de ter um `ADMIN`, pois não existe cadastro de admin pela API).
+
+## 9. Rodar a API
 
 ```bash
 npm run dev
@@ -162,7 +196,7 @@ Ecoponto API listening on port 3333
 
 A API está no ar em `http://localhost:3333`.
 
-## 9. Testar
+## 10. Testar
 
 Abra no navegador: **http://localhost:3333/docs** — é o Swagger UI, com todas as rotas documentadas e testáveis pela interface (sem precisar de Postman/Insomnia).
 
@@ -178,7 +212,23 @@ Deve responder algo como:
 { "status": "ok", "timestamp": "2026-..." }
 ```
 
-Para testar o fluxo de cadastro e login, veja os exemplos de `curl` em [CLAUDE.md](CLAUDE.md).
+### Testando login e rotas protegidas
+
+1. Faça login com uma conta do seed:
+   ```bash
+   curl -X POST http://localhost:3333/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@ecoponto.dev","password":"Ecoponto@123"}'
+   ```
+   A resposta traz um `idToken`: é o token de acesso (Firebase ID Token), válido por 1 hora.
+2. Use o token no cabeçalho `Authorization` das rotas protegidas:
+   ```bash
+   curl http://localhost:3333/auth/me -H "Authorization: Bearer <idToken>"
+   curl http://localhost:3333/users   -H "Authorization: Bearer <idToken>"   # só ADMIN
+   ```
+   No Swagger, clique em **Authorize** e cole o token.
+
+Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste com o seu nome** (ex: `joao.silva+teste1@gmail.com`). O Firebase é compartilhado com a turma, então um e-mail usado por um colega vai dar `409 Email already registered` para você.
 
 ## Outros comandos úteis
 
@@ -203,6 +253,7 @@ Para testar o fluxo de cadastro e login, veja os exemplos de `curl` em [CLAUDE.m
 | `npm run db:migrate:deploy`            | Aplica migrations pendentes em produção (sem criar novas)                        |
 | `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                  |
 | `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                    |
+| `npm run db:seed`                      | Cria no banco local as contas de teste (admin, coletor, cidadão)                 |
 
 ## Padronização de código (ESLint + Prettier + Husky)
 
@@ -220,4 +271,8 @@ Isso já é configurado sozinho quando você roda `npm install` (o script `prepa
 - **`npm run db:up` falha ou a porta 3306 já está em uso**: você provavelmente tem outro MySQL rodando na mesma porta. Veja a nota na seção 4 sobre trocar a porta.
 - **`prisma migrate dev` dá erro de conexão logo depois do `db:up`**: raríssimo (o `--wait` já garante que o healthcheck passou), mas se acontecer, rode `docker compose logs mysql` pra ver se ele terminou de inicializar, espere alguns segundos e tente de novo.
 - **`prisma generate` não roda automaticamente**: é esperado — sempre que puxar código novo (`git pull`) que tenha mudado o `prisma/schema.prisma`, rode `npx prisma generate` de novo antes de `npm run dev`.
-- **Erro ao chamar `/auth/register` ou `/auth/login`**: confira se o provedor **E-mail/senha** está mesmo habilitado no Firebase (passo 5.2) e se as credenciais no `.env` são do projeto certo.
+- **Erro ao chamar `/auth/register` ou `/auth/login`**: confira se as quatro variáveis `FIREBASE_*` do `.env` estão preenchidas exatamente como recebidas (passo 6).
+- **`409 Email already registered` no cadastro**: esse e-mail já existe no Firebase compartilhado (talvez criado por um colega). Use outro e-mail de teste.
+- **Login funciona, mas `/auth/me` retorna `401`**: a conta existe no Firebase, mas não no **seu** banco local (foi cadastrada no ambiente de outro colega, ou você resetou o banco). Para as contas de teste, rode `npm run db:seed`; para outras, cadastre um e-mail novo.
+- **`Seed failed` com erro de conexão**: o MySQL não está rodando (`npm run db:up`) ou as tabelas não foram criadas (`npm run db:migrate`).
+- **`401` depois de um tempo usando o mesmo token**: o ID Token expira em 1 hora. Faça login de novo.
