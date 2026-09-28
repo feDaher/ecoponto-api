@@ -3,9 +3,6 @@ import { firebaseAuth } from "../config/firebase";
 import { prisma } from "../config/prisma";
 import { Role } from "../generated/prisma/enums";
 
-// O projeto Firebase de desenvolvimento é compartilhado pela turma: a senha só é
-// aplicada quando a conta é criada. Se ela já existe, o seed apenas reaproveita o uid,
-// para que nenhum aluno altere as contas dos outros ao rodar o seed.
 const SEED_PASSWORD = "Ecoponto@123";
 
 const seedUsers = [
