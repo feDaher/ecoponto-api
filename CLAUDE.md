@@ -37,6 +37,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npx prisma migrate dev --name <name>` — create/apply a migration against `DATABASE_URL`
 - `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
 - `npm run format` / `npm run format:check` — Prettier
+- `npm run db:seed` — seeds the three dev accounts (see "Shared Firebase project & seed" below)
 - No test runner is configured yet (`npm test` is a placeholder). The project docs call for Jest — not set up in this repo yet.
 
 ### Lint/format enforcement (Husky + lint-staged)
@@ -68,6 +69,16 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 - **Protected routes**: `authenticate` middleware (`src/middlewares/authenticate.middleware.ts`) verifies the `Authorization: Bearer <idToken>` header via `firebaseAuth.verifyIdToken`, then loads the local `User` row by `firebaseUid` and attaches it to `req.user`. A valid Firebase token for a user with no local `User` row is rejected (401) — Firebase and the local DB must stay in sync through `/auth/register`.
 - **RBAC**: `authorize(...roles)` (`src/middlewares/authorize.middleware.ts`) checks `req.user.role` against an allow-list, e.g. `authorize(Role.ADMIN)` on `GET /users`. Always chain it after `authenticate`.
 - `req.user` typing is added via module augmentation in `src/types/express/index.d.ts`.
+- **Firebase ↔ DB consistency on register**: `RegisterUserUseCase` creates the Firebase user first; if the local `User` insert then fails, it deletes the Firebase user (compensation) before rethrowing. Without that, the email would be stuck as "already registered" (409) while having no local row (401 on every protected route). Keep this compensation pattern in any future flow that writes to both Firebase and the DB.
+
+### Shared Firebase project & seed
+
+This is a class project: the professor (orientador) owns a single **dev** Firebase project, and every student gets its credentials (`FIREBASE_*` in `.env`) through a private channel — students do not create their own Firebase project. Each student runs their **own** local MySQL (Docker). Consequences:
+
+- Firebase Auth users are shared across the whole class; `User` rows are per-machine. A user registered on one student's machine exists in Firebase but not in another student's DB: re-registering that email → 409, logging in works but protected routes → 401. This is expected, not a bug.
+- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`). Idempotent; refuses to run with `NODE_ENV=production`.
+- The seed is the only way to get an `ADMIN` in a fresh environment (no admin self-registration).
+- Never commit credentials, and a production deployment must use a separate Firebase project.
 
 ### Prisma client generation
 

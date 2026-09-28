@@ -19,13 +19,9 @@ export class RegisterUserUseCase {
   ) {}
 
   async execute({ name, email, password, phone, city, role }: RegisterUserInput) {
-    try {
-      const firebaseUser = await this.firebaseAuth.createUser({
-        email,
-        password,
-        displayName: name,
-      });
+    const firebaseUser = await this.createFirebaseUser(email, password, name);
 
+    try {
       return await this.userRepository.create({
         firebaseUid: firebaseUser.uid,
         name,
@@ -34,6 +30,21 @@ export class RegisterUserUseCase {
         city,
         role,
       });
+    } catch (error) {
+      await this.firebaseAuth.deleteUser(firebaseUser.uid).catch((deleteError) => {
+        console.error(
+          `Failed to roll back Firebase user ${firebaseUser.uid} after local insert failure:`,
+          deleteError,
+        );
+      });
+
+      throw error;
+    }
+  }
+
+  private async createFirebaseUser(email: string, password: string, displayName: string) {
+    try {
+      return await this.firebaseAuth.createUser({ email, password, displayName });
     } catch (error) {
       if (
         error &&

@@ -15,6 +15,12 @@
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f mysql",
     "db:reset": "docker compose down -v && docker compose up -d --wait",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
+    "db:studio": "prisma studio",
+    "db:seed": "ts-node --transpile-only src/database/seed.ts",
     "prepare": "husky",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
