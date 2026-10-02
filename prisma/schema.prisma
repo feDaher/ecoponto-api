@@ -18,14 +18,44 @@ enum Role {
   ADMIN
 }
 
+enum CollectionPointStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique
-  name        String
-  email       String   @unique
-  phone       String
-  city        String
-  role        Role     @default(CITIZEN)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String            @id @default(uuid())
+  firebaseUid      String            @unique
+  name             String
+  email            String            @unique
+  phone            String
+  city             String
+  role             Role              @default(CITIZEN)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  collectionPoints CollectionPoint[]
+}
+
+model CollectionPoint {
+  id                  String                @id @default(uuid())
+  collectorId         String
+  collector           User                  @relation(fields: [collectorId], references: [id])
+  name                String
+  description         String?               @db.Text
+  city                String
+  address             String
+  latitude            Decimal               @db.Decimal(10, 8)
+  longitude           Decimal               @db.Decimal(11, 8)
+  whatsappContact     String?
+  showWhatsappContact Boolean               @default(false)
+  wasteCategories     Json
+  operatingHours      Json
+  status              CollectionPointStatus @default(PENDING)
+  rejectionReason     String?               @db.Text
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([status, city])
+  @@index([collectorId])
 }
