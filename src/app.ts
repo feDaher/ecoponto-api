@@ -9,6 +9,7 @@ import { notFound } from "./middlewares/not-found.middleware";
 import { authRoutes } from "./modules/auth/presentation/auth.routes";
 import { healthRoutes } from "./modules/health/presentation/health.routes";
 import { usersRoutes } from "./modules/users/presentation/users.routes";
+import { educationalContentRoutes } from "./modules/educational-content/presentation/educational-content.routes";
 
 export const app = express();
 
@@ -27,6 +28,7 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use(healthRoutes);
 app.use(authRoutes);
 app.use(usersRoutes);
+app.use(educationalContentRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
