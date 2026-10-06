@@ -19,7 +19,7 @@ enum CollectionPointStatus {
   REJECTED
 }
 
-model user {
+model User {
   id          String @id @default(uuid())
   firebaseUid String @unique
   name        String
@@ -46,6 +46,14 @@ model wasteCategory {
   updatedAt DateTime @updatedAt
 }
 
+model waste {
+  wasteId     String  @id @default(uuid())
+  wasteName   String  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model collectionPoint {
   id      String                @id @default(uuid())
   name    String
@@ -54,10 +62,10 @@ model collectionPoint {
   status  CollectionPointStatus @default(PENDING)
 
   createdById String
-  createdBy   user   @relation("CreatedPoints", fields: [createdById], references: [id])
+  createdBy   User   @relation("CreatedPoints", fields: [createdById], references: [id])
 
   approvedById String?
-  approvedBy   user?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
+  approvedBy   User?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
 
   approvedAt DateTime?
 
