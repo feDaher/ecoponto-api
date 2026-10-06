@@ -28,25 +28,25 @@ model User {
   city        String
   role        Role   @default(CITIZEN)
 
-  createdPoints  collectionPoint[] @relation("CreatedPoints")
-  approvedPoints collectionPoint[] @relation("ApprovedPoints")
+  createdPoints  CollectionPoint[] @relation("CreatedPoints")
+  approvedPoints CollectionPoint[] @relation("ApprovedPoints")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model wasteCategory {
+model WasteCategory {
   id     String  @id @default(uuid())
   name   String  @unique
   active Boolean @default(true)
 
-  points pointCategory[]
+  points PointCategory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model waste {
+model Waste {
   wasteId     String  @id @default(uuid())
   wasteName   String  @unique
 
@@ -54,7 +54,7 @@ model waste {
   updatedAt DateTime @updatedAt
 }
 
-model collectionPoint {
+model CollectionPoint {
   id      String                @id @default(uuid())
   name    String
   address String
@@ -69,18 +69,18 @@ model collectionPoint {
 
   approvedAt DateTime?
 
-  categories pointCategory[]
+  categories PointCategory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model pointCategory {
+model PointCategory {
   pointId    String
   categoryId String
 
-  point    collectionPoint @relation(fields: [pointId], references: [id])
-  category wasteCategory   @relation(fields: [categoryId], references: [id])
+  point    CollectionPoint @relation(fields: [pointId], references: [id])
+  category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
 }
