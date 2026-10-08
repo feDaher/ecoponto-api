@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -18,16 +13,76 @@ enum Role {
   ADMIN
 }
 
+enum CollectionPointStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
-  id          String   @id @default(uuid())
-  firebaseUid String   @unique
+  id          String @id @default(uuid())
+  firebaseUid String @unique
   name        String
-  email       String   @unique
+  email       String @unique
   phone       String
   city        String
-  role        Role     @default(CITIZEN)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  role        Role   @default(CITIZEN)
+
+  createdPoints  CollectionPoint[] @relation("CreatedPoints")
+  approvedPoints CollectionPoint[] @relation("ApprovedPoints")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WasteCategory {
+  id     String  @id @default(uuid())
+  name   String  @unique
+  active Boolean @default(true)
+
+  points PointCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Waste {
+  wasteId     String  @id @default(uuid())
+  wasteName   String  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CollectionPoint {
+  id      String                @id @default(uuid())
+  name    String
+  address String
+  city    String
+  status  CollectionPointStatus @default(PENDING)
+
+  createdById String
+  createdBy   User   @relation("CreatedPoints", fields: [createdById], references: [id])
+
+  approvedById String?
+  approvedBy   User?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
+
+  approvedAt DateTime?
+
+  categories PointCategory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PointCategory {
+  pointId    String
+  categoryId String
+
+  point    CollectionPoint @relation(fields: [pointId], references: [id])
+  category WasteCategory   @relation(fields: [categoryId], references: [id])
+
+  @@id([pointId, categoryId])
 }
 
 model EducationalContent {
