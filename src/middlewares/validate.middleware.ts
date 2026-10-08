@@ -1,10 +1,12 @@
 import type { NextFunction, Request, Response } from "express";
-import type { ZodType, z } from "zod";
+import type { ZodType } from "zod";
 import { AppError } from "../shared/errors/AppError";
 
-export function validate<T extends ZodType>(schema: T) {
+type RequestSource = "body" | "query" | "params";
+
+export function validate<T extends ZodType>(schema: T, source: RequestSource = "body") {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const result = schema.safeParse(req.body);
+    const result = schema.safeParse(req[source]);
 
     if (!result.success) {
       next(
@@ -16,7 +18,13 @@ export function validate<T extends ZodType>(schema: T) {
       return;
     }
 
-    req.body = result.data as z.infer<T>;
+    // Express 5 exposes req.query as a getter, so it cannot be reassigned directly.
+    Object.defineProperty(req, source, {
+      value: result.data,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
     next();
   };
 }

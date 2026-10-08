@@ -13,6 +13,7 @@ import { adminRoutes } from "./modules/admin/presentation/admin.routes";
 import { collectorRoutes } from "./modules/collector/presentation/collector.routes";
 import { citizenRoutes } from "./modules/citizen/presentation/citizen.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
+import { placesRoutes } from "./modules/places/presentation/places.routes";
 
 export const app = express();
 
@@ -35,6 +36,7 @@ app.use(adminRoutes);
 app.use(collectorRoutes);
 app.use(citizenRoutes);
 app.use(collectionPointsRoutes);
+app.use(placesRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
