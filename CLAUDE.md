@@ -11,7 +11,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
   - **Coletor/Cooperativa** (`COLLECTOR`): registers and manages their own collection point(s), updates hours, receives requests, logs received materials, exposes a WhatsApp contact button.
   - **Administrador** (`ADMIN`): approves/moderates collection points before they appear on the map, moderates reviews/content, manages users, publishes educational content.
 - **MVP functional scope**: georeferenced map of collection points, filters, detailed point info, route tracing, user registration/login, point credentialing+approval workflow, WhatsApp contact channel, environmental education content module, gamification (points/ranking/badges for disposals), point reviews/ratings, Google Maps integration.
-- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
+- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me), and the Google Places proxy for address search (`src/modules/places/`). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
 
 ### Business rules to honor when building those modules
 
@@ -93,6 +93,21 @@ The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adap
 ### Config (`src/config/`)
 
 `env.ts` validates `process.env` with Zod at import time and throws immediately if anything is missing/invalid — this is the first thing that runs (imported transitively by nearly everything), so a missing env var fails fast at boot rather than surfacing as a runtime error deep in a request. `firebase.ts` and `prisma.ts` both depend on `env` being valid. `swagger.ts` builds the OpenAPI spec from JSDoc `@openapi` comments in `src/modules/**/presentation/*.routes.ts` (glob path is relative to `process.cwd()`, i.e. only works when run from the project root — this only picks up routes documented with `@openapi` blocks, and only from `.ts` source, so it will not find routes after a production `dist/` build; acceptable for now since Swagger is a dev-time contract tool).
+
+### Places / Google Maps (`src/modules/places/`)
+
+Public proxy to **Places API (New)** for the address search box of the web and mobile apps, so the Google key only exists on the server (the apps keep only their platform-restricted map-rendering keys).
+
+- `GET /places/autocomplete?input=&sessionToken=&latitude=&longitude=` → `[{ placeId, title, subtitle }]`
+- `GET /places/:placeId?sessionToken=` → `{ label, latitude, longitude, viewport?: { southWest, northEast } }`
+
+Rules worth keeping when touching it:
+
+- `GOOGLE_MAPS_API_KEY` is **optional** in `env.ts` (so classmates without a key can still boot); `GooglePlacesClient` answers 503 when it is missing. It is sent only in the `X-Goog-Api-Key` header, never in a URL, and the key should be restricted in Google Cloud to Places API (New) + the server's IP.
+- Every input is validated with `z.strictObject` before any Google call (unknown/repeated params rejected, `input` 3–200 chars without control chars, `sessionToken`/`placeId` limited to `[A-Za-z0-9_-]`, latitude/longitude parsed from strict decimal strings, both or neither). `validate(schema, "query" | "params")` replaces `req.query`/`req.params` with the parsed values via `Object.defineProperty`, since Express 5's `req.query` is a getter.
+- Google's response is also validated with Zod. Google errors never reach the client: details 400/404 → 404, timeout (5s)/network/429 → 503, anything else → 502. Logs carry only Google's status code, never the key or the query text.
+- Per-IP limiters on top of the global one: autocomplete 30/min, details 15/min. Responses are `Cache-Control: no-store` (Google's terms forbid caching Places content).
+- Fixed `languageCode: pt-BR`, `regionCode`/`includedRegionCodes: br`; results are biased to a 30 km circle around the client's coordinates, or around Manhuaçu when none are sent.
 
 ### Path alias
 
