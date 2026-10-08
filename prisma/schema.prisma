@@ -52,6 +52,7 @@ model User {
   collections      Collection[]
   disposalRecords  DisposalRecord[]
   reviews          Review[]
+  auditLogs        AuditLog[]
 }
 
 model CollectionPoint {
@@ -216,4 +217,13 @@ model Review {
   @@index([citizenId])
   @@index([collectionPointId])
   @@index([collectionPointId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
