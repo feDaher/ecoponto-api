@@ -14,7 +14,7 @@ enum Role {
 }
 
 enum CollectionPointStatus {
-  PENDING
+  PENDING 
   APPROVED
   REJECTED
   INACTIVE
@@ -95,8 +95,11 @@ model WasteCategory {
   description String? @db.VarChar(500)
   active      Boolean @default(true)
 
+  educationalContents EducationalContent[]
+
   points          PointCategory[]
   disposalRecords DisposalRecord[]
+
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -120,6 +123,16 @@ model PointCategory {
   @@id([pointId, categoryId])
 }
 
+
+model EducationalContent {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  categoryId String
+  category   WasteCategory @relation(fields: [categoryId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 // Horários de funcionamento de cada ponto de coleta
 model OperatingHours {
   id                String          @id @default(uuid())
