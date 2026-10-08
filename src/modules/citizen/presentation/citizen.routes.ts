@@ -3,24 +3,24 @@ import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { authorize } from "../../../middlewares/authorize.middleware";
 import { Role } from "../../../generated/prisma/enums";
 
-export const adminRoutes = Router();
+export const citizenRoutes = Router();
 
 /**
  * @openapi
- * /admin:
+ * /citizen:
  *   get:
- *     summary: Administrator area (Administrator only)
- *     tags: [Admin]
+ *     summary: Citizen area (Citizen only)
+ *     tags: [Citizen]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Access granted to the administrator
+ *         description: Access granted to the citizen
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
- *         description: Authenticated user is not an Administrator
+ *         description: Authenticated user is not a Citizen
  */
-adminRoutes.get("/admin", authenticate, authorize(Role.ADMIN), (req, res) => {
-  res.status(200).json({ message: "Access granted to administrator", user: req.user });
+citizenRoutes.get("/citizen", authenticate, authorize(Role.CITIZEN), (req, res) => {
+  res.status(200).json({ message: "Access granted to citizen", user: req.user });
 });
