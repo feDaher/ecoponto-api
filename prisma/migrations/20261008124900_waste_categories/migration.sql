@@ -22,34 +22,12 @@ CREATE TABLE `Waste` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `CollectionPoint` (
-    `id` VARCHAR(191) NOT NULL,
-    `name` VARCHAR(191) NOT NULL,
-    `address` VARCHAR(191) NOT NULL,
-    `city` VARCHAR(191) NOT NULL,
-    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
-    `createdById` VARCHAR(191) NOT NULL,
-    `approvedById` VARCHAR(191) NULL,
-    `approvedAt` DATETIME(3) NULL,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
-
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
 CREATE TABLE `PointCategory` (
     `pointId` VARCHAR(191) NOT NULL,
     `categoryId` VARCHAR(191) NOT NULL,
 
     PRIMARY KEY (`pointId`, `categoryId`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- AddForeignKey
-ALTER TABLE `CollectionPoint` ADD CONSTRAINT `CollectionPoint_createdById_fkey` FOREIGN KEY (`createdById`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `CollectionPoint` ADD CONSTRAINT `CollectionPoint_approvedById_fkey` FOREIGN KEY (`approvedById`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `PointCategory` ADD CONSTRAINT `PointCategory_pointId_fkey` FOREIGN KEY (`pointId`) REFERENCES `CollectionPoint`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

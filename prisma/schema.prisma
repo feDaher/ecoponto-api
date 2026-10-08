@@ -17,60 +17,94 @@ enum CollectionPointStatus {
   PENDING
   APPROVED
   REJECTED
+  INACTIVE
+}
+
+enum Weekday {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum DisposalStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
 }
 
 model User {
-  id          String @id @default(uuid())
-  firebaseUid String @unique
+  id          String   @id @default(uuid())
+  firebaseUid String   @unique
   name        String
-  email       String @unique
+  email       String   @unique
   phone       String
   city        String
-  role        Role   @default(CITIZEN)
+  role        Role     @default(CITIZEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  createdPoints  CollectionPoint[] @relation("CreatedPoints")
-  approvedPoints CollectionPoint[] @relation("ApprovedPoints")
-  auditLogs AuditLog[]
+  collectionPoints CollectionPoint[] @relation("CollectorPoints")
+  reviewedPoints   CollectionPoint[] @relation("ReviewedPoints")
+  collections      Collection[]
+  disposalRecords  DisposalRecord[]
+  reviews          Review[]
+  auditLogs        AuditLog[]
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model CollectionPoint {
+  id                  String                @id @default(uuid())
+  collectorId         String
+  collector           User                  @relation("CollectorPoints", fields: [collectorId], references: [id])
+  name                String
+  description         String?               @db.Text
+  city                String
+  address             String
+  latitude            Decimal               @db.Decimal(10, 8)
+  longitude           Decimal               @db.Decimal(11, 8)
+  whatsappContact     String?
+  showWhatsappContact Boolean               @default(false)
+  wasteCategories     Json
+  operatingHours      Json
+  status              CollectionPointStatus @default(PENDING)
+  rejectionReason     String?               @db.Text
+  reviewedById        String?
+  reviewedBy          User?                 @relation("ReviewedPoints", fields: [reviewedById], references: [id])
+  reviewedAt          DateTime?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  categories      PointCategory[]
+  hours           OperatingHours[]
+  geolocation     Geolocation?
+  collections     Collection[]
+  disposalRecords DisposalRecord[]
+  reviews         Review[]
+
+  @@index([status, city])
+  @@index([collectorId])
+  @@index([reviewedById])
 }
 
 model WasteCategory {
-  id     String  @id @default(uuid())
-  name   String  @unique
-  active Boolean @default(true)
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String? @db.VarChar(500)
+  active      Boolean @default(true)
 
-  points PointCategory[]
+  points          PointCategory[]
+  disposalRecords DisposalRecord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model Waste {
-  wasteId     String  @id @default(uuid())
-  wasteName   String  @unique
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CollectionPoint {
-  id      String                @id @default(uuid())
-  name    String
-  address String
-  city    String
-  status  CollectionPointStatus @default(PENDING)
-
-  createdById String
-  createdBy   User   @relation("CreatedPoints", fields: [createdById], references: [id])
-
-  approvedById String?
-  approvedBy   User?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
-
-  approvedAt DateTime?
-
-  categories PointCategory[]
+  wasteId   String @id @default(uuid())
+  wasteName String @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -84,6 +118,105 @@ model PointCategory {
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+}
+
+// Horários de funcionamento de cada ponto de coleta
+model OperatingHours {
+  id                String          @id @default(uuid())
+  collectionPointId String
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id], onDelete: Cascade)
+  weekday           Weekday
+  openTime          DateTime        @db.Time(0)
+  closeTime         DateTime        @db.Time(0)
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([collectionPointId])
+  @@index([weekday])
+}
+
+// Localização geográfica do ponto de coleta (1:1 com CollectionPoint)
+model Geolocation {
+  id                String          @id @default(uuid())
+  collectionPointId String          @unique
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id], onDelete: Cascade)
+  latitude          Decimal         @db.Decimal(10, 8)
+  longitude         Decimal         @db.Decimal(11, 8)
+  address           String
+  neighborhood      String?
+  city              String
+  state             String          @db.VarChar(2)
+  postalCode        String?         @db.VarChar(20)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([city])
+}
+
+// Coleta realizada por um coletor em um ponto de coleta
+model Collection {
+  id                String           @id @default(uuid())
+  collectorId       String
+  collector         User             @relation(fields: [collectorId], references: [id])
+  collectionPointId String
+  collectionPoint   CollectionPoint  @relation(fields: [collectionPointId], references: [id])
+  scheduledAt       DateTime
+  startedAt         DateTime?
+  completedAt       DateTime?
+  totalWeightKg     Decimal?         @db.Decimal(10, 3)
+  notes             String?          @db.Text
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  disposalRecords   DisposalRecord[]
+
+  @@index([collectorId])
+  @@index([collectionPointId])
+  @@index([collectionPointId, scheduledAt])
+}
+
+// Registro de descarte feito por um cidadão (alimenta a gamificação)
+model DisposalRecord {
+  id                String          @id @default(uuid())
+  citizenId         String
+  citizen           User            @relation(fields: [citizenId], references: [id])
+  collectionPointId String
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id])
+  categoryId        String
+  category          WasteCategory   @relation(fields: [categoryId], references: [id])
+  // Pode ser associado posteriormente a uma coleta
+  collectionId      String?
+  collection        Collection?     @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  weightKg          Decimal         @db.Decimal(10, 3)
+  pointsEarned      Int             @default(0)
+  status            DisposalStatus  @default(PENDING)
+  disposedAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([citizenId])
+  @@index([collectionPointId])
+  @@index([categoryId])
+  @@index([collectionId])
+  @@index([disposedAt, status])
+  @@index([collectionPointId, disposedAt])
+}
+
+// Avaliação feita por cidadão sobre um ponto de coleta
+model Review {
+  id                String          @id @default(uuid())
+  citizenId         String
+  citizen           User            @relation(fields: [citizenId], references: [id])
+  collectionPointId String
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id])
+  rating            Int             @db.UnsignedTinyInt
+  comment           String?         @db.Text
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([citizenId])
+  @@index([collectionPointId])
+  @@index([collectionPointId, createdAt])
 }
 
 model AuditLog {
