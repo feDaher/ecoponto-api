@@ -30,6 +30,7 @@ model User {
 
   createdPoints  CollectionPoint[] @relation("CreatedPoints")
   approvedPoints CollectionPoint[] @relation("ApprovedPoints")
+  auditLogs AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -83,4 +84,13 @@ model PointCategory {
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  action    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
