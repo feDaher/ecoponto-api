@@ -13,6 +13,7 @@ import {
   findEducationalContentById,
   listEducationalContents,
   updateEducationalContent,
+  listEducationalContentsByCategory,
 } from "./educational-content.controller";
 
 export const educationalContentRoutes = Router();
@@ -29,8 +30,10 @@ export const educationalContentRoutes = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [title, content]
+ *             required: [categoryId, title, content]
  *             properties:
+ *               categoryId:
+ *                 type: string
  *               title:
  *                 type: string
  *               content:
@@ -60,6 +63,27 @@ educationalContentRoutes.post(
  */
 
 educationalContentRoutes.get("/educational-content", listEducationalContents);
+
+/**
+ * @openapi
+ * /educational-content/category/{categoryId}:
+ *   get:
+ *     summary: List educational contents by category
+ *     tags: [Educational Content]
+ *     parameters:
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Educational contents from the selected category
+ */
+educationalContentRoutes.get(
+  "/educational-content/category/:categoryId",
+  listEducationalContentsByCategory,
+);
 
 /**
  * @openapi
@@ -101,6 +125,8 @@ educationalContentRoutes.get("/educational-content/:id", findEducationalContentB
  *           schema:
  *             type: object
  *             properties:
+ *               categoryId:
+ *                 type: string
  *               title:
  *                 type: string
  *               content:
@@ -111,7 +137,7 @@ educationalContentRoutes.get("/educational-content/:id", findEducationalContentB
  *       400:
  *         description: Invalid request data
  *       404:
- *         description: Educational content not found
+ *         description: Educational content or category not found
  */
 
 educationalContentRoutes.patch(

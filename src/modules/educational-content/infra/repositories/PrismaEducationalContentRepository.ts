@@ -15,6 +15,11 @@ export class PrismaEducationalContentRepository implements IEducationalContentRe
   findMany() {
     return prisma.educationalContent.findMany();
   }
+  findByCategory(categoryId: string) {
+    return prisma.educationalContent.findMany({
+      where: { categoryId },
+    });
+  }
   update(id: string, data: UpdateEducationalContentData) {
     return prisma.educationalContent.update({
       where: { id },
