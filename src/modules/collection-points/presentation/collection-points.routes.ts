@@ -13,6 +13,9 @@ const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
 
+// Moderation details are internal — never expose them on the public map.
+const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
+
 /**
  * @openapi
  * /collection-points:
@@ -34,6 +37,7 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
       status: CollectionPointStatus.APPROVED,
       ...(city ? { city: { equals: city } } : {}),
     },
+    omit: publicOmit,
     orderBy: { name: "asc" },
   });
   res.status(200).json(
@@ -144,6 +148,7 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
   const pointId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const point = await prisma.collectionPoint.findFirst({
     where: { id: pointId, status: CollectionPointStatus.APPROVED },
+    omit: publicOmit,
   });
   if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
   res.status(200).json({
@@ -195,6 +200,8 @@ collectionPointsRoutes.put(
         ...req.body,
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,
+        reviewedById: null,
+        reviewedAt: null,
       },
     });
     res.status(200).json(point);
@@ -246,6 +253,8 @@ collectionPointsRoutes.patch(
         status: req.body.status,
         rejectionReason:
           req.body.status === CollectionPointStatus.REJECTED ? req.body.rejectionReason : null,
+        reviewedById: req.user!.id,
+        reviewedAt: new Date(),
       },
     });
     res.status(200).json(point);
