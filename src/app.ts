@@ -9,7 +9,9 @@ import { notFound } from "./middlewares/not-found.middleware";
 import { authRoutes } from "./modules/auth/presentation/auth.routes";
 import { healthRoutes } from "./modules/health/presentation/health.routes";
 import { usersRoutes } from "./modules/users/presentation/users.routes";
+import { adminRoutes } from "./modules/admin/presentation/admin.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
+
 
 export const app = express();
 
@@ -28,6 +30,7 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use(healthRoutes);
 app.use(authRoutes);
 app.use(usersRoutes);
+app.use(adminRoutes);
 app.use(collectionPointsRoutes);
 
 app.use(notFound);
