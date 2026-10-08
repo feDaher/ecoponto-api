@@ -10,7 +10,7 @@ export function authorize(...allowedRoles: Role[]) {
     }
 
     if (!allowedRoles.includes(req.user.role)) {
-      next(new AppError("Forbidden", 403));
+      next(new AppError("You do not have permission to access this resource", 403));
       return;
     }
 
