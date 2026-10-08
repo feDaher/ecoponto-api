@@ -18,6 +18,16 @@ enum Role {
   ADMIN
 }
 
+enum Weekday {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -28,4 +38,15 @@ model User {
   role        Role     @default(CITIZEN)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model OperatingHours {
+  id                String          @id @default(uuid())
+  collectionPointId String
+  weekday           Weekday
+  openTime          String
+  closeTime         String
+  collectionPoint   collectionPoint @relation(fields: [collectionPointId], references: [id])
+
+  @@unique([collectionPointId, weekday])
 }
