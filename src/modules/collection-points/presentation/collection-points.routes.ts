@@ -16,6 +16,34 @@ const pointWithCollector = {
 // Moderation details are internal — never expose them on the public map.
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 
+const wasteTypes = [
+  "PLASTIC",
+  "PAPER",
+  "METALS",
+  "GLASS",
+  "COOKING_OIL",
+  "ELECTRONICS",
+  "BATTERIES",
+  "CELL_PHONES",
+  "COMPUTERS",
+  "PRINTERS",
+  "TELEVISIONS",
+] as const;
+
+const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 /**
  * @openapi
  * /collection-points:
@@ -25,23 +53,129 @@ const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true
  *     parameters:
  *       - in: query
  *         name: city
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: Filter by city
+ *       - in: query
+ *         name: wasteType
+ *         schema:
+ *           type: string
+ *           enum: [PLASTIC, PAPER, METALS, GLASS, COOKING_OIL, ELECTRONICS, BATTERIES, CELL_PHONES, COMPUTERS, PRINTERS, TELEVISIONS]
+ *         description: Filter by waste type
+ *       - in: query
+ *         name: latitude
+ *         schema:
+ *           type: number
+ *         description: Latitude de referência para busca por proximidade
+ *       - in: query
+ *         name: longitude
+ *         schema:
+ *           type: number
+ *         description: Longitude de referência para busca por proximidade
+ *       - in: query
+ *         name: radius
+ *         schema:
+ *           type: number
+ *           minimum: 0
+ *         description: Raio máximo da busca em quilômetros
  *     responses:
  *       200:
  *         description: Public collection points (approved only)
  */
 collectionPointsRoutes.get("/collection-points", async (req, res) => {
-  const city = typeof req.query.city === "string" ? req.query.city : undefined;
+  const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
+
+  const wasteType =
+    typeof req.query.wasteType === "string" ? req.query.wasteType.trim() : undefined;
+
+  const wasteTypeNames: Record<string, string> = {
+    PLASTIC: "Plástico",
+    PAPER: "Papel",
+    METALS: "Metais",
+    GLASS: "Vidro",
+    COOKING_OIL: "Óleo de cozinha",
+    ELECTRONICS: "Eletrônicos",
+    BATTERIES: "Pilhas e baterias",
+    CELL_PHONES: "Celulares",
+    COMPUTERS: "Computadores",
+    PRINTERS: "Impressoras",
+    TELEVISIONS: "Televisões",
+  };
+
+  if (wasteType && !wasteTypes.includes(wasteType as (typeof wasteTypes)[number])) {
+    throw new AppError(`Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`, 400);
+  }
+  const wasteTypeName = wasteType ? wasteTypeNames[wasteType] : undefined;
+
+  const latitude = typeof req.query.latitude === "string" ? Number(req.query.latitude) : undefined;
+
+  const longitude =
+    typeof req.query.longitude === "string" ? Number(req.query.longitude) : undefined;
+
+  const radius = typeof req.query.radius === "string" ? Number(req.query.radius) : undefined;
+  if (
+    (latitude !== undefined && !Number.isFinite(latitude)) ||
+    (longitude !== undefined && !Number.isFinite(longitude)) ||
+    (radius !== undefined && (!Number.isFinite(radius) || radius <= 0))
+  ) {
+    throw new AppError("Latitude, longitude ou raio inválido.", 400);
+  }
+
+  if (
+    (latitude === undefined) !== (longitude === undefined) ||
+    (radius !== undefined && (latitude === undefined || longitude === undefined))
+  ) {
+    throw new AppError("Informe latitude e longitude juntas; o raio exige ambas.", 400);
+  }
+
+  if (
+    (latitude !== undefined && (latitude < -90 || latitude > 90)) ||
+    (longitude !== undefined && (longitude < -180 || longitude > 180))
+  ) {
+    throw new AppError("Coordenadas fora dos limites válidos.", 400);
+  }
   const points = await prisma.collectionPoint.findMany({
     where: {
       status: CollectionPointStatus.APPROVED,
       ...(city ? { city: { equals: city } } : {}),
+      ...(wasteType
+        ? {
+            categories: {
+              some: {
+                category: {
+                  name: {
+                    equals: wasteTypeName,
+                  },
+                  active: true,
+                },
+              },
+            },
+          }
+        : {}),
     },
+
     omit: publicOmit,
     orderBy: { name: "asc" },
   });
+  const filteredPoints =
+    latitude !== undefined && longitude !== undefined && radius !== undefined
+      ? points.filter((point) => {
+          if (point.latitude == null || point.longitude == null) {
+            return false;
+          }
+
+          const distance = calculateDistanceKm(
+            latitude,
+            longitude,
+            Number(point.latitude),
+            Number(point.longitude),
+          );
+
+          return distance <= radius;
+        })
+      : points;
   res.status(200).json(
-    points.map((point) => ({
+    filteredPoints.map((point) => ({
       ...point,
       whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
     })),
