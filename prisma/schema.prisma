@@ -53,6 +53,8 @@ model User {
   disposalRecords  DisposalRecord[]
   reviews          Review[]
   auditLogs        AuditLog[]
+
+  @@index([createdAt])
 }
 
 model CollectionPoint {
@@ -200,6 +202,7 @@ model DisposalRecord {
   @@index([collectionId])
   @@index([disposedAt, status])
   @@index([collectionPointId, disposedAt])
+  @@index([status, disposedAt, categoryId])
 }
 
 // Avaliação feita por cidadão sobre um ponto de coleta
