@@ -4,4 +4,4 @@
 CREATE INDEX `User_createdAt_idx` ON `User`(`createdAt`);
 
 -- CreateIndex
-CREATE INDEX `DisposalRecord_status_disposedAt_categoryId_idx` ON `DisposalRecord`(`status`, `disposedAt`, `categoryId`);
+CREATE INDEX `DisposalRecord_report_cov_idx` ON `DisposalRecord`(`status`, `disposedAt`, `categoryId`, `weightKg`, `pointsEarned`);

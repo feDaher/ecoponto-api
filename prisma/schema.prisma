@@ -202,7 +202,7 @@ model DisposalRecord {
   @@index([collectionId])
   @@index([disposedAt, status])
   @@index([collectionPointId, disposedAt])
-  @@index([status, disposedAt, categoryId])
+  @@index([status, disposedAt, categoryId, weightKg, pointsEarned], map: "DisposalRecord_report_cov_idx")
 }
 
 // Avaliação feita por cidadão sobre um ponto de coleta
