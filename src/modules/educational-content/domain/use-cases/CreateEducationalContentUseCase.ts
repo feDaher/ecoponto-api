@@ -1,5 +1,5 @@
 import type { IEducationalContentRepository } from "../repositories/IEducationalContentRepository";
-import type { IWasteCategoryRepository } from "../../../waste-category/domain/repositories/IWasteCategoryRepository";
+import type { IWasteCategoryRepository } from "../../../waste-categories/domain/repositories/IWasteCategoryRepository";
 import { AppError } from "../../../../shared/errors/AppError";
 
 export interface CreateEducationalContentInput {

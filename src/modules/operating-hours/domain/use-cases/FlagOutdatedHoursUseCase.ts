@@ -9,6 +9,6 @@ export class FlagOutdatedHoursUseCase {
     const limit = new Date(now);
     limit.setDate(limit.getDate() - OUTDATED_AFTER_DAYS);
 
-    return this.operatingHoursRepository.markOutdatedBefore(limit);
+    return this.operatingHoursRepository.flagPointsNotConfirmedSince(limit);
   }
 }

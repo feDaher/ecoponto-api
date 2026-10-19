@@ -11,7 +11,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
   - **Coletor/Cooperativa** (`COLLECTOR`): registers and manages their own collection point(s), updates hours, receives requests, logs received materials, exposes a WhatsApp contact button.
   - **Administrador** (`ADMIN`): approves/moderates collection points before they appear on the map, moderates reviews/content, manages users, publishes educational content.
 - **MVP functional scope**: georeferenced map of collection points, filters, detailed point info, route tracing, user registration/login, point credentialing+approval workflow, WhatsApp contact channel, environmental education content module, gamification (points/ranking/badges for disposals), point reviews/ratings, Google Maps integration.
-- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me), and the Google Places proxy for address search (`src/modules/places/`). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
+- This backend currently implements: health-check, auth/RBAC (register, login, me, per-role `/admin` `/collector` `/citizen`), the Google Places proxy (`src/modules/places/`), collection points with admin approval and public search by city/waste type/radius (`collection-points/`), waste categories CRUD (`waste-categories/`), operating hours CRUD plus the daily outdated-hours job (`operating-hours/`), and public educational content per category (`educational-content/`). `disposals/` and `reports/` (gamification, dashboards) are **not yet built**, nor are reviews, notifications or WhatsApp.
 
 ### Business rules to honor when building those modules
 
@@ -53,7 +53,15 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 - `infra/` — concrete implementations (Prisma repositories, external HTTP clients)
 - `presentation/` — Express routes/controllers, Zod validators
 
-`src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/`, `disposals/`, `reports/` are still empty — future tasks (see business rules above for what they need to cover).
+`src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/` still talks to Prisma straight from its routes (pending refactor into use-cases); `waste-categories/`, `operating-hours/` and `educational-content/` already follow the layered shape. `waste-categories/` is the single module for the category taxonomy — reuse its repository instead of creating another one.
+
+### Collection point data that exists in two places
+
+`CollectionPoint` still carries `wasteCategories` and `operatingHours` as JSON (written by `POST/PUT /collection-points` and used by the public search filter `wasteType` via `array_contains`), while the normalized `PointCategory` and `OperatingHours` tables are written by the `operating-hours/` module. Until they are unified, keep both in mind: the search reads the JSON, the per-point hours endpoint reads the table.
+
+### Outdated hours flag (BE-05)
+
+`CollectionPoint.hoursConfirmedAt` is reset to now (and `isOutdated` to false) whenever the collector creates/updates/deletes operating hours or resubmits the point via `PUT /collection-points/:id`. `startOutdatedHoursJob()` (`node-cron`, started from `server.ts`, daily 03:00 America/Sao_Paulo) flags points with `hoursConfirmedAt` older than 60 days as `isOutdated = true`; the flag is returned by the public collection-point endpoints. Only the point owner or an ADMIN may change a point's hours (`ensureCanManageCollectionPoint`).
 
 ### Request pipeline (`src/app.ts`)
 
@@ -77,7 +85,7 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 This is a class project: the professor (orientador) owns a single **dev** Firebase project, and every student gets its credentials (`FIREBASE_*` in `.env`) through a private channel — students do not create their own Firebase project. Each student runs their **own** local MySQL (Docker). Consequences:
 
 - Firebase Auth users are shared across the whole class; `User` rows are per-machine. A user registered on one student's machine exists in Firebase but not in another student's DB: re-registering that email → 409, logging in works but protected routes → 401. This is expected, not a bug.
-- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`). Idempotent; refuses to run with `NODE_ENV=production`.
+- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes the collection-point `wasteCategories` JSON uses). Idempotent; refuses to run with `NODE_ENV=production`.
 - The seed is the only way to get an `ADMIN` in a fresh environment (no admin self-registration).
 - Never commit credentials, and a production deployment must use a separate Firebase project.
 
@@ -129,7 +137,7 @@ This repo is only the `API Backend` container in the project's C4 model. The doc
 
 ### Data model reference (from the docs' ER/class diagrams)
 
-Only `User` exists in `prisma/schema.prisma` so far. When implementing `collection-points`/`disposals`/`reports`, the documented relational model (Portuguese names translated here to this project's English-identifier convention) is:
+Most of the tables below already exist in `prisma/schema.prisma` (some still unused by any route, e.g. `Geolocation`, `Collection`, `DisposalRecord`, `Review`). The documented relational model (Portuguese names translated here to this project's English-identifier convention) is:
 
 - **CollectionPoint** (`PONTO_COLETA`): id, collectorId (FK → User), name, city, latitude (decimal 10,8), longitude (decimal 11,8), whatsappContact, approvalStatus, credentialedAt, updatedAt, deletedAt (soft delete). Many-to-many with waste categories via a join table (`PONTO_CATEGORIA`).
 - **OperatingHours** (`HORARIO_FUNCIONAMENTO`): id, collectionPointId (FK), weekday, openTime, closeTime.

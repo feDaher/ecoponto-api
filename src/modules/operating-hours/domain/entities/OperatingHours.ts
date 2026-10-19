@@ -4,6 +4,7 @@ export interface OperatingHours {
   id: string;
   collectionPointId: string;
   weekday: Weekday;
-  openTime: string; // "HH:mm"
-  closeTime: string; // "HH:mm"
+  openTime: string;
+  closeTime: string;
+  isActive: boolean;
 }
