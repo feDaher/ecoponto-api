@@ -20,6 +20,11 @@ enum CollectionPointStatus {
   INACTIVE
 }
 
+enum LocationSource {
+  GPS_COORDINATES
+  VERIFIED_ADDRESS
+}
+
 enum Weekday {
   MONDAY
   TUESDAY
@@ -67,6 +72,8 @@ model CollectionPoint {
   address             String
   latitude            Decimal               @db.Decimal(10, 8)
   longitude           Decimal               @db.Decimal(11, 8)
+  locationSource      LocationSource        @default(GPS_COORDINATES)
+  placeId             String?               @db.VarChar(512)
   whatsappContact     String?
   showWhatsappContact Boolean               @default(false)
   wasteCategories     Json

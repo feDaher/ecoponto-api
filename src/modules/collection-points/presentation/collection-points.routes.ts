@@ -1,12 +1,20 @@
 import { Router } from "express";
+import { env } from "../../../config/env";
 import { prisma } from "../../../config/prisma";
 import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
 import { AppError } from "../../../shared/errors/AppError";
+import { distanceInKm } from "../../../shared/geo/distance";
 import { assertOwner } from "../../../shared/security/access-policy";
-import { collectionPointSchema, reviewSchema } from "./collection-points.validators";
+import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
+import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
+import {
+  collectionPointSchema,
+  reviewSchema,
+  type CollectionPointInput,
+} from "./collection-points.validators";
 
 export const collectionPointsRoutes = Router();
 
@@ -31,19 +39,20 @@ const wasteTypes = [
   "TELEVISIONS",
 ] as const;
 
-const calculateDistanceKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
 
-  const earthRadiusKm = 6371;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
+async function withResolvedLocation(body: CollectionPointInput) {
+  const { latitude, longitude, placeId, ...point } = body;
+  const location = await resolveLocation.execute({ latitude, longitude, placeId });
 
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
-
-  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
+  return {
+    ...point,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    locationSource: location.source,
+    placeId: location.placeId,
+  };
+}
 
 /**
  * @openapi
@@ -136,11 +145,9 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
             return false;
           }
 
-          const distance = calculateDistanceKm(
-            latitude,
-            longitude,
-            Number(point.latitude),
-            Number(point.longitude),
+          const distance = distanceInKm(
+            { latitude, longitude },
+            { latitude: Number(point.latitude), longitude: Number(point.longitude) },
           );
 
           return distance <= radius;
@@ -219,6 +226,12 @@ collectionPointsRoutes.get(
  *     responses:
  *       201:
  *         description: Point submitted for approval
+ *       400:
+ *         description: Malformed request body
+ *       422:
+ *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
+ *       503:
+ *         description: Address verification service unavailable
  */
 collectionPointsRoutes.post(
   "/collection-points",
@@ -227,7 +240,7 @@ collectionPointsRoutes.post(
   validate(collectionPointSchema),
   async (req, res) => {
     const point = await prisma.collectionPoint.create({
-      data: { ...req.body, collectorId: req.user!.id },
+      data: { ...(await withResolvedLocation(req.body)), collectorId: req.user!.id },
     });
     res.status(201).json(point);
   },
@@ -284,6 +297,8 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
  *     responses:
  *       200:
  *         description: Updated point resubmitted for approval
+ *       422:
+ *         description: Missing or invalid location
  */
 collectionPointsRoutes.put(
   "/collection-points/:id",
@@ -305,7 +320,7 @@ collectionPointsRoutes.put(
     const point = await prisma.collectionPoint.update({
       where: { id: existing.id },
       data: {
-        ...req.body,
+        ...(await withResolvedLocation(req.body)),
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,
         reviewedById: null,
