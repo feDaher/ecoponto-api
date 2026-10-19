@@ -287,6 +287,24 @@ Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOA
 
 **ProxySQL:** fica para quando houver réplicas do MySQL (master/slave, previsto na arquitetura). Com um único servidor, o pool da própria aplicação já absorve os picos, como mostra o teste acima.
 
+## Cadastro de ponto: como enviar a localização
+
+O cadastro (`POST /collection-points`) e a edição (`PUT /collection-points/:id`) exigem uma localização válida, conforme a regra RN04. Há três jeitos de enviar:
+
+| O que enviar             | Quando usar                                              | O que o servidor faz                                         |
+| ------------------------ | -------------------------------------------------------- | ------------------------------------------------------------ |
+| `latitude` + `longitude` | GPS do celular ou pin no mapa                            | Confere se as duas vieram e se o ponto fica no Brasil        |
+| `placeId`                | Endereço escolhido na busca (`GET /places/autocomplete`) | Consulta o Google e usa as coordenadas confirmadas           |
+| os três juntos           | Endereço escolhido + pin ajustado no mapa                | Confirma o endereço e exige que o pin esteja a até 1 km dele |
+
+Respostas:
+
+- **422**: sem localização, coordenada fora do Brasil (inclusive `0,0` e latitude/longitude trocadas), endereço não encontrado ou pin longe do endereço.
+- **400**: corpo malformado (ex.: latitude como texto).
+- **503**: o serviço de verificação de endereço está indisponível, ou falta a `GOOGLE_MAPS_API_KEY`. Sem a chave, cadastre usando coordenadas.
+
+O ponto salvo guarda em `locationSource` como a localização foi obtida (`GPS_COORDINATES` ou `VERIFIED_ADDRESS`), para o admin conferir na aprovação.
+
 ## Testes automatizados e controle de acesso
 
 ```bash

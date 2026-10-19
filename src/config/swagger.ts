@@ -12,15 +12,9 @@ export const swaggerSpec = swaggerJsdoc({
       schemas: {
         CollectionPointInput: {
           type: "object",
-          required: [
-            "name",
-            "city",
-            "address",
-            "latitude",
-            "longitude",
-            "wasteCategories",
-            "operatingHours",
-          ],
+          required: ["name", "city", "address", "wasteCategories", "operatingHours"],
+          description:
+            "Location (RN04): send valid GPS coordinates within Brazil (latitude + longitude), a verifiable address (placeId from GET /places/autocomplete), or both. With a placeId the server confirms the address with Google; when coordinates are also sent they must be within 1 km of it. A missing or invalid location returns 422.",
           properties: {
             name: { type: "string", example: "Eco Ponto Centro" },
             description: { type: "string", example: "Recebimento de recicláveis" },
@@ -28,6 +22,11 @@ export const swaggerSpec = swaggerJsdoc({
             address: { type: "string", example: "Rua A, 10" },
             latitude: { type: "number", format: "double", example: -20.25 },
             longitude: { type: "number", format: "double", example: -42.03 },
+            placeId: {
+              type: "string",
+              pattern: "^[A-Za-z0-9_-]{1,512}$",
+              description: "Google place id of a verifiable address",
+            },
             whatsappContact: { type: "string", example: "33999999999" },
             showWhatsappContact: { type: "boolean", default: false },
             wasteCategories: {
