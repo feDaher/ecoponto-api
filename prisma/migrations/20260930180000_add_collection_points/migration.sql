@@ -1,0 +1,22 @@
+CREATE TABLE `CollectionPoint` (
+    `id` VARCHAR(191) NOT NULL,
+    `collectorId` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `description` TEXT NULL,
+    `city` VARCHAR(191) NOT NULL,
+    `address` VARCHAR(191) NOT NULL,
+    `latitude` DECIMAL(10,8) NOT NULL,
+    `longitude` DECIMAL(11,8) NOT NULL,
+    `whatsappContact` VARCHAR(191) NULL,
+    `showWhatsappContact` BOOLEAN NOT NULL DEFAULT false,
+    `wasteCategories` JSON NOT NULL,
+    `operatingHours` JSON NOT NULL,
+    `status` ENUM('PENDING', 'APPROVED', 'REJECTED') NOT NULL DEFAULT 'PENDING',
+    `rejectionReason` TEXT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    INDEX `CollectionPoint_status_city_idx`(`status`, `city`),
+    INDEX `CollectionPoint_collectorId_idx`(`collectorId`),
+    PRIMARY KEY (`id`),
+    CONSTRAINT `CollectionPoint_collectorId_fkey` FOREIGN KEY (`collectorId`) REFERENCES `User`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

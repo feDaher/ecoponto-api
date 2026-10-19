@@ -107,6 +107,7 @@ FIREBASE_API_KEY="chave-recebida"
 
 - `DATABASE_URL` já vem certo para o MySQL do Docker (passo 4). Só mude se alterou usuário/senha/porta no `docker-compose.yml`.
 - Mantenha a `FIREBASE_PRIVATE_KEY` **entre aspas e numa linha só**, com os `\n` literais, exatamente como foi recebida.
+- As variáveis do pool de conexões (`DB_POOL_*`, `DB_CONNECT_TIMEOUT_MS`) e o `RATE_LIMIT_MAX` são opcionais — se não estiverem no `.env`, valem os padrões descritos em [Pool de conexões e teste de carga](#pool-de-conexões-e-teste-de-carga).
 
 ## 7. Criar as tabelas no banco (Prisma)
 
@@ -254,6 +255,37 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 | `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                  |
 | `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                    |
 | `npm run db:seed`                      | Cria no banco local as contas de teste (admin, coletor, cidadão)                 |
+| `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                              |
+
+## Pool de conexões e teste de carga
+
+A API reutiliza um pool de conexões com o MySQL em vez de abrir uma conexão por requisição. O pool é configurado por variáveis de ambiente (todas opcionais):
+
+| Variável                     | Padrão  | O que controla                                                                     |
+| ---------------------------- | ------- | ---------------------------------------------------------------------------------- |
+| `DB_POOL_LIMIT`              | `20`    | Máximo de conexões abertas com o MySQL por instância da API                        |
+| `DB_POOL_ACQUIRE_TIMEOUT_MS` | `10000` | Quanto tempo uma requisição espera por uma conexão livre antes de falhar           |
+| `DB_POOL_IDLE_TIMEOUT_S`     | `300`   | Depois de quantos segundos parada uma conexão ociosa é fechada                     |
+| `DB_CONNECT_TIMEOUT_MS`      | `5000`  | Tempo máximo para abrir uma conexão nova com o MySQL                               |
+| `RATE_LIMIT_MAX`             | `100`   | Requisições permitidas por IP a cada 15 min (aumente só para rodar teste de carga) |
+
+Um parâmetro colocado direto na `DATABASE_URL` (ex: `...?connectionLimit=5`) tem prioridade sobre essas variáveis.
+
+**Por que 20?** Teste de carga em `GET /collection-points` (100 pontos aprovados, 200 conexões simultâneas, 15 s): com pool 5 a API atendeu ~107 req/s, com 10 ~190 req/s, com 20 ~232 req/s e com 40 ~229 req/s — acima de 20 o gargalo deixa de ser o banco. Em nenhum cenário houve erro, e o p99 ficou abaixo de 1,3 s (requisito: busca em menos de 2 s). O MySQL aceita 151 conexões por padrão, então cabem várias instâncias da API com folga.
+
+**Rodando o teste de carga:**
+
+```bash
+# terminal 1: sobe a API sem o rate limit atrapalhar o teste
+RATE_LIMIT_MAX=100000000 npm run dev
+
+# terminal 2
+npm run load-test
+```
+
+Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_PATH` (padrão `/collection-points`) e `LOAD_TEST_URL`. O comando termina com erro se qualquer requisição falhar. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
+
+**ProxySQL:** fica para quando houver réplicas do MySQL (master/slave, previsto na arquitetura). Com um único servidor, o pool da própria aplicação já absorve os picos, como mostra o teste acima.
 
 ## Padronização de código (ESLint + Prettier + Husky)
 

@@ -11,7 +11,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
   - **Coletor/Cooperativa** (`COLLECTOR`): registers and manages their own collection point(s), updates hours, receives requests, logs received materials, exposes a WhatsApp contact button.
   - **Administrador** (`ADMIN`): approves/moderates collection points before they appear on the map, moderates reviews/content, manages users, publishes educational content.
 - **MVP functional scope**: georeferenced map of collection points, filters, detailed point info, route tracing, user registration/login, point credentialing+approval workflow, WhatsApp contact channel, environmental education content module, gamification (points/ranking/badges for disposals), point reviews/ratings, Google Maps integration.
-- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
+- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me), and the Google Places proxy for address search (`src/modules/places/`). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
 
 ### Business rules to honor when building those modules
 
@@ -38,6 +38,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
 - `npm run format` / `npm run format:check` — Prettier
 - `npm run db:seed` — seeds the three dev accounts (see "Shared Firebase project & seed" below)
+- `npm run load-test` — autocannon load test (`src/scripts/load-test.ts`) against an already-running API; exits non-zero on any non-2xx/error/timeout. Start the API with a high `RATE_LIMIT_MAX` first, or the global rate limiter turns the run into 429s
 - No test runner is configured yet (`npm test` is a placeholder). The project docs call for Jest — not set up in this repo yet.
 
 ### Lint/format enforcement (Husky + lint-staged)
@@ -56,7 +57,7 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 
 ### Request pipeline (`src/app.ts`)
 
-Middleware order matters: `helmet` → `cors` → `express-rate-limit` (100 req/15min global) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
+Middleware order matters: `helmet` → `cors` → `express-rate-limit` (`RATE_LIMIT_MAX` req/15min per IP, default 100) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
 
 Route handlers are plain async functions — **do not wrap them in a try/catch-to-next helper**. Express 5's router natively forwards rejected promises to the error middleware (verified in `node_modules/router/lib/layer.js`), so throwing an `AppError` (`src/shared/errors/AppError.ts`) from anywhere in a request, sync or async, reaches `errorHandler` automatically.
 
@@ -84,7 +85,7 @@ This is a class project: the professor (orientador) owns a single **dev** Fireba
 
 `prisma/schema.prisma` uses the newer `prisma-client` generator (TypeScript source, not the classic `@prisma/client` codegen), with `output = "../src/generated/prisma"`. It **must** be generated inside `src/`, not at the project root — `tsconfig.json` has `rootDir: "src"` + `include: ["src/**/*"]`, and since the generated files are plain `.ts` that gets compiled with the rest of the app (imported via relative paths, e.g. `src/config/prisma.ts`), anything outside `src` would fail with TS6059 (`rootDir` violation). `src/generated/` is gitignored (matched by the `generated/` rule) and regenerated via `npx prisma generate`.
 
-The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter (`PrismaMariaDb(env.DATABASE_URL)`), not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
+The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter, not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. The adapter always creates a `mariadb` connection pool; `prisma.ts` passes it the `DATABASE_URL` string with pool options (`connectionLimit`, `acquireTimeout`, `idleTimeout`, `connectTimeout`) appended as query params from `DB_POOL_*`/`DB_CONNECT_TIMEOUT_MS` env vars, only when the URL doesn't already set them (URL wins). Keep passing the URL string rather than a parsed host/user/password object, so other driver options in the URL query aren't silently dropped. Default pool size 20 was chosen from load tests (throughput plateaus above ~20 connections; see README). That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
 
 ### Local database (`docker-compose.yml`)
 
@@ -93,6 +94,21 @@ The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adap
 ### Config (`src/config/`)
 
 `env.ts` validates `process.env` with Zod at import time and throws immediately if anything is missing/invalid — this is the first thing that runs (imported transitively by nearly everything), so a missing env var fails fast at boot rather than surfacing as a runtime error deep in a request. `firebase.ts` and `prisma.ts` both depend on `env` being valid. `swagger.ts` builds the OpenAPI spec from JSDoc `@openapi` comments in `src/modules/**/presentation/*.routes.ts` (glob path is relative to `process.cwd()`, i.e. only works when run from the project root — this only picks up routes documented with `@openapi` blocks, and only from `.ts` source, so it will not find routes after a production `dist/` build; acceptable for now since Swagger is a dev-time contract tool).
+
+### Places / Google Maps (`src/modules/places/`)
+
+Public proxy to **Places API (New)** for the address search box of the web and mobile apps, so the Google key only exists on the server (the apps keep only their platform-restricted map-rendering keys).
+
+- `GET /places/autocomplete?input=&sessionToken=&latitude=&longitude=` → `[{ placeId, title, subtitle }]`
+- `GET /places/:placeId?sessionToken=` → `{ label, latitude, longitude, viewport?: { southWest, northEast } }`
+
+Rules worth keeping when touching it:
+
+- `GOOGLE_MAPS_API_KEY` is **optional** in `env.ts` (so classmates without a key can still boot); `GooglePlacesClient` answers 503 when it is missing. It is sent only in the `X-Goog-Api-Key` header, never in a URL, and the key should be restricted in Google Cloud to Places API (New) + the server's IP.
+- Every input is validated with `z.strictObject` before any Google call (unknown/repeated params rejected, `input` 3–200 chars without control chars, `sessionToken`/`placeId` limited to `[A-Za-z0-9_-]`, latitude/longitude parsed from strict decimal strings, both or neither). `validate(schema, "query" | "params")` replaces `req.query`/`req.params` with the parsed values via `Object.defineProperty`, since Express 5's `req.query` is a getter.
+- Google's response is also validated with Zod. Google errors never reach the client: details 400/404 → 404, timeout (5s)/network/429 → 503, anything else → 502. Logs carry only Google's status code, never the key or the query text.
+- Per-IP limiters on top of the global one: autocomplete 30/min, details 15/min. Responses are `Cache-Control: no-store` (Google's terms forbid caching Places content).
+- Fixed `languageCode: pt-BR`, `regionCode`/`includedRegionCodes: br`; results are biased to a 30 km circle around the client's coordinates, or around Manhuaçu when none are sent.
 
 ### Path alias
 
@@ -106,7 +122,7 @@ This repo is only the `API Backend` container in the project's C4 model. The doc
 - **Mobile app**: React Native + NativeWind + Expo (Managed Workflow) — end-user (citizen/collector) app.
 - **Push notifications**: Expo Push API (delivers via APNs/FCM).
 - **Geolocation/maps**: Google Maps Platform (geocoding, map rendering, route opening).
-- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo currently just points `DATABASE_URL` at a single MySQL instance via `@prisma/adapter-mariadb`.
+- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo points `DATABASE_URL` at a single MySQL instance; app-level pooling is configured (see Prisma section), while ProxySQL is deferred until there are replicas to route between.
 - **Testing**: Jest is the documented choice for unit/integration tests (not set up in this repo yet).
 - **PM process**: Scrum + Jira (sprints, backlog, burndown) — not tooling relevant to this codebase.
 - Possible future backend migration to **NestJS** if complexity grows (explicitly called out as optional, not a current requirement — stick with Express/Clean-Architecture-by-module as-is unless asked).

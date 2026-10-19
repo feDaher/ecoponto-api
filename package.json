@@ -22,7 +22,8 @@
     "db:studio": "prisma studio",
     "db:seed": "ts-node --transpile-only src/database/seed.ts",
     "prepare": "husky",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "load-test": "ts-node --transpile-only src/scripts/load-test.ts"
   },
   "lint-staged": {
     "*.ts": [
@@ -52,11 +53,13 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/autocannon": "^7.12.7",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.1",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "autocannon": "^8.0.0",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
