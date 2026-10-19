@@ -3,7 +3,7 @@ import type {
   IEducationalContentRepository,
   UpdateEducationalContentData,
 } from "../repositories/IEducationalContentRepository";
-import type { IWasteCategoryRepository } from "../../../waste-category/domain/repositories/IWasteCategoryRepository";
+import type { IWasteCategoryRepository } from "../../../waste-categories/domain/repositories/IWasteCategoryRepository";
 
 export class UpdateEducationalContentUseCase {
   constructor(

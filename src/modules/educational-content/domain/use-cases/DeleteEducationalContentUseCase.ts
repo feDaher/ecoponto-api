@@ -8,7 +8,6 @@ export class DeleteEducationalContentUseCase {
     if (!content) {
       throw new AppError("Content not found", 404);
     }
-    const deletedContent = await this.educationalContentRepository.delete(id);
-    return deletedContent;
+    await this.educationalContentRepository.delete(id);
   }
 }

@@ -17,6 +17,7 @@ export async function createOperatingHours(req: Request, res: Response) {
   const operatingHours = await createOperatingHoursUseCase.execute({
     collectionPointId: String(req.params.collectionPointId),
     ...req.body,
+    requester: req.user!,
   });
   res.status(201).json(operatingHours);
 }
@@ -32,11 +33,12 @@ export async function updateOperatingHours(req: Request, res: Response) {
   const operatingHours = await updateOperatingHoursUseCase.execute({
     id: String(req.params.id),
     ...req.body,
+    requester: req.user!,
   });
   res.status(200).json(operatingHours);
 }
 
 export async function deleteOperatingHours(req: Request, res: Response) {
-  await deleteOperatingHoursUseCase.execute({ id: String(req.params.id) });
+  await deleteOperatingHoursUseCase.execute({ id: String(req.params.id), requester: req.user! });
   res.status(204).send();
 }

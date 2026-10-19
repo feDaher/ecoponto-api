@@ -20,5 +20,7 @@ export interface IOperatingHoursRepository {
   findByCollectionPointId(collectionPointId: string): Promise<OperatingHours[]>;
   update(id: string, data: UpdateOperatingHoursData): Promise<OperatingHours>;
   delete(id: string): Promise<void>;
-  markOutdatedBefore(date: Date): Promise<number>;
+  findCollectionPointOwnerId(collectionPointId: string): Promise<string | null>;
+  confirmHours(collectionPointId: string): Promise<void>;
+  flagPointsNotConfirmedSince(date: Date): Promise<number>;
 }

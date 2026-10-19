@@ -88,24 +88,9 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
   const wasteType =
     typeof req.query.wasteType === "string" ? req.query.wasteType.trim() : undefined;
 
-  const wasteTypeNames: Record<string, string> = {
-    PLASTIC: "Plástico",
-    PAPER: "Papel",
-    METALS: "Metais",
-    GLASS: "Vidro",
-    COOKING_OIL: "Óleo de cozinha",
-    ELECTRONICS: "Eletrônicos",
-    BATTERIES: "Pilhas e baterias",
-    CELL_PHONES: "Celulares",
-    COMPUTERS: "Computadores",
-    PRINTERS: "Impressoras",
-    TELEVISIONS: "Televisões",
-  };
-
   if (wasteType && !wasteTypes.includes(wasteType as (typeof wasteTypes)[number])) {
     throw new AppError(`Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`, 400);
   }
-  const wasteTypeName = wasteType ? wasteTypeNames[wasteType] : undefined;
 
   const latitude = typeof req.query.latitude === "string" ? Number(req.query.latitude) : undefined;
 
@@ -138,22 +123,8 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
     where: {
       status: CollectionPointStatus.APPROVED,
       ...(city ? { city: { equals: city } } : {}),
-      ...(wasteType
-        ? {
-            categories: {
-              some: {
-                category: {
-                  name: {
-                    equals: wasteTypeName,
-                  },
-                  active: true,
-                },
-              },
-            },
-          }
-        : {}),
+      ...(wasteType ? { wasteCategories: { array_contains: [wasteType] } } : {}),
     },
-
     omit: publicOmit,
     orderBy: { name: "asc" },
   });
@@ -336,6 +307,8 @@ collectionPointsRoutes.put(
         rejectionReason: null,
         reviewedById: null,
         reviewedAt: null,
+        hoursConfirmedAt: new Date(),
+        isOutdated: false,
       },
     });
     res.status(200).json(point);

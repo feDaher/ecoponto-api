@@ -1,12 +1,12 @@
+import { Router } from "express";
+import { Role } from "../../../generated/prisma/enums";
+import { authenticate } from "../../../middlewares/authenticate.middleware";
+import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
-
 import {
   createEducationalContentSchema,
   updateEducationalContentSchema,
 } from "./educational-content.validators";
-
-import { Router } from "express";
-
 import {
   createEducationalContent,
   deleteEducationalContent,
@@ -22,8 +22,10 @@ export const educationalContentRoutes = Router();
  * @openapi
  * /educational-content:
  *   post:
- *     summary: Create educational content
+ *     summary: Create educational content (Administrator only)
  *     tags: [Educational Content]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -43,10 +45,17 @@ export const educationalContentRoutes = Router();
  *         description: Educational content created
  *       400:
  *         description: Invalid request data
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Authenticated user is not an Administrator
+ *       404:
+ *         description: Category not found or inactive
  */
-
 educationalContentRoutes.post(
   "/educational-content",
+  authenticate,
+  authorize(Role.ADMIN),
   validate(createEducationalContentSchema),
   createEducationalContent,
 );
@@ -61,7 +70,6 @@ educationalContentRoutes.post(
  *       200:
  *         description: Educational contents list
  */
-
 educationalContentRoutes.get("/educational-content", listEducationalContents);
 
 /**
@@ -103,15 +111,16 @@ educationalContentRoutes.get(
  *       404:
  *         description: Educational content not found
  */
-
 educationalContentRoutes.get("/educational-content/:id", findEducationalContentById);
 
 /**
  * @openapi
  * /educational-content/{id}:
  *   patch:
- *     summary: Update educational content
+ *     summary: Update educational content (Administrator only)
  *     tags: [Educational Content]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -138,10 +147,15 @@ educationalContentRoutes.get("/educational-content/:id", findEducationalContentB
  *         description: Invalid request data
  *       404:
  *         description: Educational content or category not found
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Authenticated user is not an Administrator
  */
-
 educationalContentRoutes.patch(
   "/educational-content/:id",
+  authenticate,
+  authorize(Role.ADMIN),
   validate(updateEducationalContentSchema),
   updateEducationalContent,
 );
@@ -150,8 +164,10 @@ educationalContentRoutes.patch(
  * @openapi
  * /educational-content/{id}:
  *   delete:
- *     summary: Delete educational content
+ *     summary: Delete educational content (Administrator only)
  *     tags: [Educational Content]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -159,10 +175,18 @@ educationalContentRoutes.patch(
  *         schema:
  *           type: string
  *     responses:
- *       200:
+ *       204:
  *         description: Educational content deleted
  *       404:
  *         description: Educational content not found
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Authenticated user is not an Administrator
  */
-
-educationalContentRoutes.delete("/educational-content/:id", deleteEducationalContent);
+educationalContentRoutes.delete(
+  "/educational-content/:id",
+  authenticate,
+  authorize(Role.ADMIN),
+  deleteEducationalContent,
+);

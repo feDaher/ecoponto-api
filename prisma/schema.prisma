@@ -14,21 +14,20 @@ enum Role {
 }
 
 enum CollectionPointStatus {
-  PENDING 
+  PENDING
   APPROVED
   REJECTED
   INACTIVE
 }
 
 enum Weekday {
-
-  SUNDAY
   MONDAY
   TUESDAY
   WEDNESDAY
   THURSDAY
   FRIDAY
   SATURDAY
+  SUNDAY
 }
 
 enum DisposalStatus {
@@ -77,6 +76,8 @@ model CollectionPoint {
   reviewedById        String?
   reviewedBy          User?                 @relation("ReviewedPoints", fields: [reviewedById], references: [id])
   reviewedAt          DateTime?
+  hoursConfirmedAt    DateTime              @default(now())
+  isOutdated          Boolean               @default(false)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
@@ -90,6 +91,7 @@ model CollectionPoint {
   @@index([status, city])
   @@index([collectorId])
   @@index([reviewedById])
+  @@index([isOutdated, hoursConfirmedAt])
 }
 
 model WasteCategory {
@@ -102,7 +104,6 @@ model WasteCategory {
 
   points          PointCategory[]
   disposalRecords DisposalRecord[]
-
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -126,16 +127,18 @@ model PointCategory {
   @@id([pointId, categoryId])
 }
 
-
 model EducationalContent {
-  id        String   @id @default(uuid())
-  title     String
-  content   String
+  id         String        @id @default(uuid())
+  title      String
+  content    String        @db.Text
   categoryId String
   category   WasteCategory @relation(fields: [categoryId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([categoryId])
 }
+
 // Horários de funcionamento de cada ponto de coleta
 model OperatingHours {
   id                String          @id @default(uuid())
@@ -243,55 +246,4 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
-}
-
-model OperatingHours {
-  id                String          @id @default(uuid())
-  collectionPointId String
-  weekday           Weekday
-  openTime          String
-  closeTime         String
-  collectionPoint   collectionPoint @relation(fields: [collectionPointId], references: [id])
-
-  @@unique([collectionPointId, weekday])
-}
-
-model CollectionPoint {
-  id                  String                @id @default(uuid())
-  collectorId         String
-  collector           User                  @relation(fields: [collectorId], references: [id])
-  name                String
-  description         String?               @db.Text
-  city                String
-  address             String
-  latitude            Decimal               @db.Decimal(10, 8)
-  longitude           Decimal               @db.Decimal(11, 8)
-  whatsappContact     String?
-  showWhatsappContact Boolean               @default(false)
-  wasteCategories     Json
-  operatingHours      Json
-  status              CollectionPointStatus @default(PENDING)
-  rejectionReason     String?               @db.Text
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-
-  @@index([status, city])
-  @@index([collectorId])
-
-  createdById String
-  createdBy   User   @relation("CreatedPoints", fields: [createdById], references: [id])
-
-  approvedById String?
-  approvedBy   User?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
-
-  approvedAt DateTime?
-
-  categories PointCategory[]
-  operatingHours operatingHours[]
-
-  hoursConfirmedAt DataTime @default(now())
-  isOutdated Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

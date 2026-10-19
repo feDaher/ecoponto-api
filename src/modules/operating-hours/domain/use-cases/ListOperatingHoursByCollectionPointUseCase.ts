@@ -1,3 +1,4 @@
+import { AppError } from "../../../../shared/errors/AppError";
 import type { IOperatingHoursRepository } from "../repositories/IOperatingHoursRepository";
 
 export interface ListOperatingHoursByCollectionPointInput {
@@ -7,7 +8,14 @@ export interface ListOperatingHoursByCollectionPointInput {
 export class ListOperatingHoursByCollectionPointUseCase {
   constructor(private readonly operatingHoursRepository: IOperatingHoursRepository) {}
 
-  execute({ collectionPointId }: ListOperatingHoursByCollectionPointInput) {
+  async execute({ collectionPointId }: ListOperatingHoursByCollectionPointInput) {
+    const ownerId =
+      await this.operatingHoursRepository.findCollectionPointOwnerId(collectionPointId);
+
+    if (!ownerId) {
+      throw new AppError("Collection point not found", 404);
+    }
+
     return this.operatingHoursRepository.findByCollectionPointId(collectionPointId);
   }
 }

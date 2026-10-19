@@ -1,4 +1,4 @@
-import type { EducationalContent } from "../entities/EducationaContent";
+import type { EducationalContent } from "../entities/EducationalContent";
 
 export interface CreateEducationalContentData {
   categoryId: string;
@@ -18,5 +18,5 @@ export interface IEducationalContentRepository {
   findByCategory(categoryId: string): Promise<EducationalContent[]>;
   findMany(): Promise<EducationalContent[]>;
   update(id: string, data: UpdateEducationalContentData): Promise<EducationalContent>;
-  delete(id: string): Promise<EducationalContent> | null;
+  delete(id: string): Promise<void>;
 }

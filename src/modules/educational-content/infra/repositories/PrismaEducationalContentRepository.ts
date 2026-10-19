@@ -26,9 +26,7 @@ export class PrismaEducationalContentRepository implements IEducationalContentRe
       data,
     });
   }
-  delete(id: string) {
-    return prisma.educationalContent.delete({
-      where: { id },
-    });
+  async delete(id: string) {
+    await prisma.educationalContent.delete({ where: { id } });
   }
 }

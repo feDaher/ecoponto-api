@@ -29,6 +29,20 @@ const seedUsers = [
   },
 ];
 
+const seedWasteCategories = [
+  { name: "PLASTIC", description: "Plástico" },
+  { name: "PAPER", description: "Papel" },
+  { name: "METALS", description: "Metais" },
+  { name: "GLASS", description: "Vidro" },
+  { name: "COOKING_OIL", description: "Óleo de cozinha usado" },
+  { name: "ELECTRONICS", description: "Eletrônicos em geral" },
+  { name: "BATTERIES", description: "Pilhas e baterias" },
+  { name: "CELL_PHONES", description: "Celulares" },
+  { name: "COMPUTERS", description: "Computadores" },
+  { name: "PRINTERS", description: "Impressoras" },
+  { name: "TELEVISIONS", description: "Televisores" },
+];
+
 async function findOrCreateFirebaseUser(email: string, displayName: string): Promise<UserRecord> {
   try {
     return await firebaseAuth.getUserByEmail(email);
@@ -62,6 +76,16 @@ async function main() {
 
     console.log(`✔ ${role.padEnd(9)} ${email}`);
   }
+
+  for (const { name, description } of seedWasteCategories) {
+    await prisma.wasteCategory.upsert({
+      where: { name },
+      create: { name, description },
+      update: { description },
+    });
+  }
+
+  console.log(`✔ ${seedWasteCategories.length} waste categories`);
 
   console.log(`\nSeed concluído. Senha das contas de teste: ${SEED_PASSWORD}`);
 }

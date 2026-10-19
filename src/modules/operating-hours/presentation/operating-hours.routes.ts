@@ -60,9 +60,8 @@ operatingHoursRoutes.get(
  *             required: [weekday, openTime, closeTime]
  *             properties:
  *               weekday:
- *                 type: integer
- *                 minimum: 0
- *                 maximum: 6
+ *                 type: string
+ *                 enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
  *               openTime:
  *                 type: string
  *                 example: "08:00"
@@ -77,7 +76,7 @@ operatingHoursRoutes.get(
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
- *         description: User is not a Collector or Administrator
+ *         description: User is not a Collector or Administrator, or does not own the collection point
  */
 operatingHoursRoutes.post(
   "/collection-points/:collectionPointId/operating-hours",
@@ -109,9 +108,8 @@ operatingHoursRoutes.post(
  *             type: object
  *             properties:
  *               weekday:
- *                 type: integer
- *                 minimum: 0
- *                 maximum: 6
+ *                 type: string
+ *                 enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
  *               openTime:
  *                 type: string
  *                 example: "08:00"
@@ -126,7 +124,7 @@ operatingHoursRoutes.post(
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
- *         description: User is not a Collector or Administrator
+ *         description: User is not a Collector or Administrator, or does not own the collection point
  *       404:
  *         description: Operating hours not found
  */
@@ -158,7 +156,7 @@ operatingHoursRoutes.put(
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
- *         description: User is not a Collector or Administrator
+ *         description: User is not a Collector or Administrator, or does not own the collection point
  *       404:
  *         description: Operating hours not found
  */

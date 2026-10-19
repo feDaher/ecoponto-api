@@ -12,12 +12,12 @@ import { healthRoutes } from "./modules/health/presentation/health.routes";
 import { usersRoutes } from "./modules/users/presentation/users.routes";
 import { educationalContentRoutes } from "./modules/educational-content/presentation/educational-content.routes";
 import { wasteCategoriesRoutes } from "./modules/waste-categories/presentation/waste-categories.routes";
+import { operatingHoursRoutes } from "./modules/operating-hours/presentation/operating-hours.routes";
 import { adminRoutes } from "./modules/admin/presentation/admin.routes";
 import { collectorRoutes } from "./modules/collector/presentation/collector.routes";
 import { citizenRoutes } from "./modules/citizen/presentation/citizen.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
 import { placesRoutes } from "./modules/places/presentation/places.routes";
-
 
 export const app = express();
 
@@ -36,16 +36,13 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use(healthRoutes);
 app.use(authRoutes);
 app.use(usersRoutes);
-
 app.use(educationalContentRoutes);
-
 app.use(wasteCategoriesRoutes);
-
+app.use(operatingHoursRoutes);
 app.use(adminRoutes);
 app.use(collectorRoutes);
 app.use(citizenRoutes);
 app.use(collectionPointsRoutes);
-
 app.use(placesRoutes);
 
 app.use(notFound);
