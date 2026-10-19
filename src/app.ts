@@ -3,6 +3,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
+import { env } from "./config/env";
 import { swaggerSpec } from "./config/swagger";
 import { errorHandler } from "./middlewares/error-handler.middleware";
 import { notFound } from "./middlewares/not-found.middleware";
@@ -22,7 +23,7 @@ app.use(cors());
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 100,
+    limit: env.RATE_LIMIT_MAX,
   }),
 );
 app.use(express.json());

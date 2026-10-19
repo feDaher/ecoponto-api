@@ -38,6 +38,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
 - `npm run format` / `npm run format:check` — Prettier
 - `npm run db:seed` — seeds the three dev accounts (see "Shared Firebase project & seed" below)
+- `npm run load-test` — autocannon load test (`src/scripts/load-test.ts`) against an already-running API; exits non-zero on any non-2xx/error/timeout. Start the API with a high `RATE_LIMIT_MAX` first, or the global rate limiter turns the run into 429s
 - No test runner is configured yet (`npm test` is a placeholder). The project docs call for Jest — not set up in this repo yet.
 
 ### Lint/format enforcement (Husky + lint-staged)
@@ -56,7 +57,7 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 
 ### Request pipeline (`src/app.ts`)
 
-Middleware order matters: `helmet` → `cors` → `express-rate-limit` (100 req/15min global) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
+Middleware order matters: `helmet` → `cors` → `express-rate-limit` (`RATE_LIMIT_MAX` req/15min per IP, default 100) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
 
 Route handlers are plain async functions — **do not wrap them in a try/catch-to-next helper**. Express 5's router natively forwards rejected promises to the error middleware (verified in `node_modules/router/lib/layer.js`), so throwing an `AppError` (`src/shared/errors/AppError.ts`) from anywhere in a request, sync or async, reaches `errorHandler` automatically.
 
@@ -84,7 +85,7 @@ This is a class project: the professor (orientador) owns a single **dev** Fireba
 
 `prisma/schema.prisma` uses the newer `prisma-client` generator (TypeScript source, not the classic `@prisma/client` codegen), with `output = "../src/generated/prisma"`. It **must** be generated inside `src/`, not at the project root — `tsconfig.json` has `rootDir: "src"` + `include: ["src/**/*"]`, and since the generated files are plain `.ts` that gets compiled with the rest of the app (imported via relative paths, e.g. `src/config/prisma.ts`), anything outside `src` would fail with TS6059 (`rootDir` violation). `src/generated/` is gitignored (matched by the `generated/` rule) and regenerated via `npx prisma generate`.
 
-The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter (`PrismaMariaDb(env.DATABASE_URL)`), not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
+The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter, not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. The adapter always creates a `mariadb` connection pool; `prisma.ts` passes it the `DATABASE_URL` string with pool options (`connectionLimit`, `acquireTimeout`, `idleTimeout`, `connectTimeout`) appended as query params from `DB_POOL_*`/`DB_CONNECT_TIMEOUT_MS` env vars, only when the URL doesn't already set them (URL wins). Keep passing the URL string rather than a parsed host/user/password object, so other driver options in the URL query aren't silently dropped. Default pool size 20 was chosen from load tests (throughput plateaus above ~20 connections; see README). That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
 
 ### Local database (`docker-compose.yml`)
 
@@ -121,7 +122,7 @@ This repo is only the `API Backend` container in the project's C4 model. The doc
 - **Mobile app**: React Native + NativeWind + Expo (Managed Workflow) — end-user (citizen/collector) app.
 - **Push notifications**: Expo Push API (delivers via APNs/FCM).
 - **Geolocation/maps**: Google Maps Platform (geocoding, map rendering, route opening).
-- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo currently just points `DATABASE_URL` at a single MySQL instance via `@prisma/adapter-mariadb`.
+- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo points `DATABASE_URL` at a single MySQL instance; app-level pooling is configured (see Prisma section), while ProxySQL is deferred until there are replicas to route between.
 - **Testing**: Jest is the documented choice for unit/integration tests (not set up in this repo yet).
 - **PM process**: Scrum + Jira (sprints, backlog, burndown) — not tooling relevant to this codebase.
 - Possible future backend migration to **NestJS** if complexity grows (explicitly called out as optional, not a current requirement — stick with Express/Clean-Architecture-by-module as-is unless asked).
