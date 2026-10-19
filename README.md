@@ -287,6 +287,23 @@ Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOA
 
 **ProxySQL:** fica para quando houver réplicas do MySQL (master/slave, previsto na arquitetura). Com um único servidor, o pool da própria aplicação já absorve os picos, como mostra o teste acima.
 
+## Testes automatizados e controle de acesso
+
+```bash
+npm test                 # roda todos os testes (não precisa de banco nem de internet)
+npm run test:coverage    # mesma coisa, com relatório de cobertura
+```
+
+Os testes de segurança ficam em `tests/security/`. O arquivo **`tests/security/access-matrix.ts`** é a tabela oficial de quem pode acessar cada rota (`PUBLIC`, `ANY_AUTHENTICATED` ou a lista de perfis). Os testes comparam essa tabela com o código de verdade, então:
+
+- **Criou uma rota nova?** Adicione a linha dela na matriz, senão o `npm test` falha.
+- **Mudou quem pode acessar uma rota?** Atualize a matriz. É essa mudança que o revisor vai conferir na PR.
+- Toda rota protegida deve seguir a ordem `authenticate` → `authorize(Role.X)` → `validate(...)` → handler.
+- Rota de escrita (POST/PUT/PATCH/DELETE) pública só com aprovação (lista `PUBLIC_WRITE_ALLOWLIST`).
+- Regra de "só o dono pode mexer": use `assertOwner` / `assertOwnerOrAdmin` de `src/shared/security/access-policy.ts`.
+
+Toda tentativa de acesso negada (403) e toda alteração feita por usuário logado fica registrada na tabela `AuditLog` (sem guardar o corpo da requisição nem o token).
+
 ## Padronização de código (ESLint + Prettier + Husky)
 
 O projeto usa **ESLint** (regras de código) e **Prettier** (formatação) para manter um padrão único entre todo mundo que contribui. Isso é reforçado automaticamente pelo **Husky**: toda vez que você roda `git commit`, um hook de pre-commit roda o `lint-staged`, que aplica `eslint --fix` e `prettier --write` só nos arquivos que você alterou (staged).

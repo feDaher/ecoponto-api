@@ -10,6 +10,10 @@ declare global {
         role: Role;
       };
     }
+
+    interface Locals {
+      requestParams?: Record<string, string | string[]>;
+    }
   }
 }
 
