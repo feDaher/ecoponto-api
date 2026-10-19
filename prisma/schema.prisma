@@ -21,13 +21,14 @@ enum CollectionPointStatus {
 }
 
 enum Weekday {
+
+  SUNDAY
   MONDAY
   TUESDAY
   WEDNESDAY
   THURSDAY
   FRIDAY
   SATURDAY
-  SUNDAY
 }
 
 enum DisposalStatus {
@@ -53,6 +54,8 @@ model User {
   disposalRecords  DisposalRecord[]
   reviews          Review[]
   auditLogs        AuditLog[]
+
+  @@index([createdAt])
 }
 
 model CollectionPoint {
@@ -213,6 +216,7 @@ model DisposalRecord {
   @@index([collectionId])
   @@index([disposedAt, status])
   @@index([collectionPointId, disposedAt])
+  @@index([status, disposedAt, categoryId, weightKg, pointsEarned], map: "DisposalRecord_report_cov_idx")
 }
 
 // Avaliação feita por cidadão sobre um ponto de coleta
@@ -239,4 +243,55 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+model OperatingHours {
+  id                String          @id @default(uuid())
+  collectionPointId String
+  weekday           Weekday
+  openTime          String
+  closeTime         String
+  collectionPoint   collectionPoint @relation(fields: [collectionPointId], references: [id])
+
+  @@unique([collectionPointId, weekday])
+}
+
+model CollectionPoint {
+  id                  String                @id @default(uuid())
+  collectorId         String
+  collector           User                  @relation(fields: [collectorId], references: [id])
+  name                String
+  description         String?               @db.Text
+  city                String
+  address             String
+  latitude            Decimal               @db.Decimal(10, 8)
+  longitude           Decimal               @db.Decimal(11, 8)
+  whatsappContact     String?
+  showWhatsappContact Boolean               @default(false)
+  wasteCategories     Json
+  operatingHours      Json
+  status              CollectionPointStatus @default(PENDING)
+  rejectionReason     String?               @db.Text
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([status, city])
+  @@index([collectorId])
+
+  createdById String
+  createdBy   User   @relation("CreatedPoints", fields: [createdById], references: [id])
+
+  approvedById String?
+  approvedBy   User?   @relation("ApprovedPoints", fields: [approvedById], references: [id])
+
+  approvedAt DateTime?
+
+  categories PointCategory[]
+  operatingHours operatingHours[]
+
+  hoursConfirmedAt DataTime @default(now())
+  isOutdated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
