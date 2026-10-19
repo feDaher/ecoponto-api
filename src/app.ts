@@ -10,6 +10,7 @@ import { notFound } from "./middlewares/not-found.middleware";
 import { authRoutes } from "./modules/auth/presentation/auth.routes";
 import { healthRoutes } from "./modules/health/presentation/health.routes";
 import { usersRoutes } from "./modules/users/presentation/users.routes";
+import { educationalContentRoutes } from "./modules/educational-content/presentation/educational-content.routes";
 import { wasteCategoriesRoutes } from "./modules/waste-categories/presentation/waste-categories.routes";
 import { adminRoutes } from "./modules/admin/presentation/admin.routes";
 import { collectorRoutes } from "./modules/collector/presentation/collector.routes";
@@ -36,12 +37,15 @@ app.use(healthRoutes);
 app.use(authRoutes);
 app.use(usersRoutes);
 
+app.use(educationalContentRoutes);
+
 app.use(wasteCategoriesRoutes);
 
 app.use(adminRoutes);
 app.use(collectorRoutes);
 app.use(citizenRoutes);
 app.use(collectionPointsRoutes);
+
 app.use(placesRoutes);
 
 app.use(notFound);
