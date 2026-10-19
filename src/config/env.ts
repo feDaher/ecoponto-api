@@ -3,6 +3,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  DATABASE_REPLICA_URL: z.string().min(1).optional(),
   PORT: z.coerce.number().int().positive().default(3333),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().min(1),

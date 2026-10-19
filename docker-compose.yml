@@ -3,18 +3,54 @@ services:
     image: mysql:8.4
     container_name: ecoponto-mysql
     restart: unless-stopped
+    # Primário (master): único que recebe escrita. GTID habilitado para a réplica.
+    command:
+      - --server-id=1
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ecoponto
       MYSQL_USER: ecoponto_app
       MYSQL_PASSWORD: SENHA
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - ecoponto_mysql_data:/var/lib/mysql
       - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      # -h 127.0.0.1 força TCP: o servidor temporário da inicialização não aceita TCP,
+      # então o healthcheck só passa quando o MySQL definitivo estiver no ar.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  mysql-replica:
+    image: mysql:8.4
+    container_name: ecoponto-mysql-replica
+    restart: unless-stopped
+    # Réplica (slave): somente leitura, dedicada a consultas de relatório/dashboard.
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command:
+      - --server-id=2
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --relay-log=relay-bin
+    environment:
+      # Sem MYSQL_DATABASE/MYSQL_USER: o banco e o usuário da aplicação chegam
+      # pela replicação (criá-los aqui causa conflito no CREATE USER replicado).
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3308:3306"
+    volumes:
+      - ecoponto_mysql_replica_data:/var/lib/mysql
+      - ./docker/mysql-replica/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,3 +58,4 @@ services:
 
 volumes:
   ecoponto_mysql_data:
+  ecoponto_mysql_replica_data:
