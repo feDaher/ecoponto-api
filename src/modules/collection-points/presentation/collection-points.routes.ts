@@ -5,6 +5,7 @@ import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
 import { AppError } from "../../../shared/errors/AppError";
+import { assertOwner } from "../../../shared/security/access-policy";
 import { collectionPointSchema, reviewSchema } from "./collection-points.validators";
 
 export const collectionPointsRoutes = Router();
@@ -295,9 +296,11 @@ collectionPointsRoutes.put(
       where: { id: pointId },
     });
     if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
-    if (existing.collectorId !== req.user!.id) {
-      throw new AppError("Você só pode atualizar seus próprios pontos de coleta", 403);
-    }
+    assertOwner(
+      req.user!,
+      existing.collectorId,
+      "Você só pode atualizar seus próprios pontos de coleta",
+    );
 
     const point = await prisma.collectionPoint.update({
       where: { id: existing.id },

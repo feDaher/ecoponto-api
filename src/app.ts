@@ -5,6 +5,7 @@ import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
 import { env } from "./config/env";
 import { swaggerSpec } from "./config/swagger";
+import { auditTrail } from "./middlewares/audit-trail.middleware";
 import { errorHandler } from "./middlewares/error-handler.middleware";
 import { notFound } from "./middlewares/not-found.middleware";
 import { authRoutes } from "./modules/auth/presentation/auth.routes";
@@ -30,6 +31,7 @@ app.use(
   }),
 );
 app.use(express.json());
+app.use(auditTrail);
 
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
