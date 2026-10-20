@@ -45,12 +45,18 @@ services:
       # pela replicação (criá-los aqui causa conflito no CREATE USER replicado).
       MYSQL_ROOT_PASSWORD: root
     ports:
-      - "3308:3306"
+      - "${MYSQL_REPLICA_PORT:-3308}:3306"
     volumes:
       - ecoponto_mysql_replica_data:/var/lib/mysql
       - ./docker/mysql-replica/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
+      # Só fica saudável com as duas threads de replicação rodando (IO e SQL): um "ping"
+      # passaria mesmo com a replicação quebrada, e o `db:up --wait` não acusaria nada.
+      test:
+        [
+          "CMD-SHELL",
+          "mysql -h 127.0.0.1 -uroot -proot -e 'SHOW REPLICA STATUS\\G' 2>/dev/null | grep -c 'Running: Yes' | grep -qx 2",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

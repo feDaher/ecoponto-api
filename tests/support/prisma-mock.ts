@@ -31,3 +31,6 @@ export const prisma = new Proxy({} as Record<string, ModelMock>, {
 export function resetPrismaMock() {
   models.clear();
 }
+
+// Without a replica the real module also points prismaRead at the primary client.
+export const prismaRead = prisma;

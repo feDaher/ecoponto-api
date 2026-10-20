@@ -14,6 +14,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f mysql",
+    "db:replica:status": "docker compose exec mysql-replica mysql -uroot -proot -e \"SHOW REPLICA STATUS\\G\"",
     "db:reset": "docker compose down -v && docker compose up -d --wait",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
