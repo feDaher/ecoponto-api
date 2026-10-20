@@ -16,8 +16,12 @@ export const collectionPointSchema = z
     description: z.string().trim().optional(),
     city: z.string().trim().min(1),
     address: z.string().trim().min(1),
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
+    latitude: z.number().optional(),
+    longitude: z.number().optional(),
+    placeId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,512}$/, "placeId must contain only letters, digits, _ or -")
+      .optional(),
     whatsappContact: z.string().trim().min(8).optional(),
     showWhatsappContact: z.boolean().default(false),
     wasteCategories: z
@@ -56,6 +60,8 @@ export const collectionPointSchema = z
       });
     }
   });
+
+export type CollectionPointInput = z.infer<typeof collectionPointSchema>;
 
 export const reviewSchema = z
   .object({

@@ -11,7 +11,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
   - **Coletor/Cooperativa** (`COLLECTOR`): registers and manages their own collection point(s), updates hours, receives requests, logs received materials, exposes a WhatsApp contact button.
   - **Administrador** (`ADMIN`): approves/moderates collection points before they appear on the map, moderates reviews/content, manages users, publishes educational content.
 - **MVP functional scope**: georeferenced map of collection points, filters, detailed point info, route tracing, user registration/login, point credentialing+approval workflow, WhatsApp contact channel, environmental education content module, gamification (points/ranking/badges for disposals), point reviews/ratings, Google Maps integration.
-- This backend currently implements only a slice of that: health-check, auth/RBAC (register, login, me). `src/modules/collection-points/`, `disposals/`, `reports/` are empty placeholders for the corresponding future features below — the rest (map UI, mobile app, gamification, notifications, WhatsApp, education content) is **not yet built** in this repo.
+- This backend currently implements: health-check, auth/RBAC (register, login, me, per-role `/admin` `/collector` `/citizen`), the Google Places proxy (`src/modules/places/`), collection points with admin approval and public search by city/waste type/radius (`collection-points/`), waste categories CRUD (`waste-categories/`), operating hours CRUD plus the daily outdated-hours job (`operating-hours/`), and public educational content per category (`educational-content/`). `disposals/` and `reports/` (gamification, dashboards) are **not yet built**, nor are reviews, notifications or WhatsApp.
 
 ### Business rules to honor when building those modules
 
@@ -38,7 +38,8 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
 - `npm run format` / `npm run format:check` — Prettier
 - `npm run db:seed` — seeds the three dev accounts (see "Shared Firebase project & seed" below)
-- No test runner is configured yet (`npm test` is a placeholder). The project docs call for Jest — not set up in this repo yet.
+- `npm run load-test` — autocannon load test (`src/scripts/load-test.ts`) against an already-running API; exits non-zero on any non-2xx/error/timeout. Start the API with a high `RATE_LIMIT_MAX` first, or the global rate limiter turns the run into 429s
+- `npm test` — Jest + ts-jest + supertest (`jest.config.js`, specs in `tests/`, own `tests/tsconfig.json`). Tests never touch Firebase or MySQL: each spec `jest.mock`s `src/config/firebase` and `src/config/prisma` with `tests/support/*-mock.ts`, and `tests/support/identities.ts` provides one token per role. `npx tsc -p tests --noEmit` type-checks the specs. `npm run test:coverage` for coverage of the security code.
 
 ### Lint/format enforcement (Husky + lint-staged)
 
@@ -52,11 +53,23 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 - `infra/` — concrete implementations (Prisma repositories, external HTTP clients)
 - `presentation/` — Express routes/controllers, Zod validators
 
-`src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/`, `disposals/`, `reports/` are still empty — future tasks (see business rules above for what they need to cover).
+`src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/` still talks to Prisma straight from its routes (pending refactor into use-cases); `waste-categories/`, `operating-hours/` and `educational-content/` already follow the layered shape. `waste-categories/` is the single module for the category taxonomy — reuse its repository instead of creating another one.
+
+### Collection point data that exists in two places
+
+`CollectionPoint` still carries `wasteCategories` and `operatingHours` as JSON (written by `POST/PUT /collection-points` and used by the public search filter `wasteType` via `array_contains`), while the normalized `PointCategory` and `OperatingHours` tables are written by the `operating-hours/` module. Until they are unified, keep both in mind: the search reads the JSON, the per-point hours endpoint reads the table.
+
+### Collection point location (BE-04, RN04)
+
+`POST`/`PUT /collection-points` never trust the client location as-is: the handler passes `latitude`/`longitude`/`placeId` through `ResolveLocationUseCase` (`src/modules/geolocation/`) before writing. Accepted inputs: GPS coordinates (both fields, inside the Brazil bounding box in `location-rules.ts` — this rejects `0,0`, swapped lat/long and other countries), a `placeId` from `GET /places/autocomplete` (the server calls Google itself and uses the confirmed coordinates), or both (then the pin must be within `MAX_DISTANCE_FROM_ADDRESS_KM` = 1 km of the verified address). Missing/semantically invalid location → **422**; malformed body (e.g. latitude as a string, `placeId` outside `[A-Za-z0-9_-]{1,512}`) → 400 from Zod. Ownership is checked before any Google call on `PUT`. Address verification fails closed: Google unavailable or no `GOOGLE_MAPS_API_KEY` → 503 and nothing is stored (students without a key can still register with coordinates). `CollectionPoint.locationSource` (`GPS_COORDINATES` | `VERIFIED_ADDRESS`) and `placeId` record how each location was established, for the admin approval step. The bounding box approximates Brazil (it also covers e.g. parts of Paraguay); real address verification comes from the `placeId` path. Governance caveat: Google's terms allow storing `placeId` indefinitely but Places-derived lat/long only for 30 days — before any production use, refresh coordinates from the stored `placeId`. Distance math lives in `src/shared/geo/distance.ts` (also used by the search radius filter).
+
+### Outdated hours flag (BE-05)
+
+`CollectionPoint.hoursConfirmedAt` is reset to now (and `isOutdated` to false) whenever the collector creates/updates/deletes operating hours or resubmits the point via `PUT /collection-points/:id`. `startOutdatedHoursJob()` (`node-cron`, started from `server.ts`, daily 03:00 America/Sao_Paulo) flags points with `hoursConfirmedAt` older than 60 days as `isOutdated = true`; the flag is returned by the public collection-point endpoints. Only the point owner or an ADMIN may change a point's hours (`ensureCanManageCollectionPoint`).
 
 ### Request pipeline (`src/app.ts`)
 
-Middleware order matters: `helmet` → `cors` → `express-rate-limit` (100 req/15min global) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
+Middleware order matters: `helmet` → `cors` → `express-rate-limit` (`RATE_LIMIT_MAX` req/15min per IP, default 100) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
 
 Route handlers are plain async functions — **do not wrap them in a try/catch-to-next helper**. Express 5's router natively forwards rejected promises to the error middleware (verified in `node_modules/router/lib/layer.js`), so throwing an `AppError` (`src/shared/errors/AppError.ts`) from anywhere in a request, sync or async, reaches `errorHandler` automatically.
 
@@ -67,7 +80,11 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 - **Register** (`POST /auth/register`): backend creates the Firebase user via Admin SDK (`RegisterUserUseCase`), then mirrors it into the local `User` table (`PrismaUserRepository`) keyed by `firebaseUid`. Required fields are `name`, `email`, `password`, `phone`, `city` — matches the docs' "Cadastro obrigatório" rule (name/email/phone/city). Self-registration is restricted to `CITIZEN`/`COLLECTOR` (see `auth.validators.ts`) — there is no endpoint to self-register as `ADMIN`; promote a user by updating `role` directly in the database.
 - **Login** (`POST /auth/login`): the Admin SDK cannot verify passwords, so `LoginUserUseCase` calls the Firebase Identity Toolkit REST API directly (`FirebaseAuthRestClient`, needs `FIREBASE_API_KEY`, the Web API key — different from the Admin SDK service-account credentials) to exchange email/password for an ID token. (Docs also mention social login via Google/Facebook — not implemented yet.)
 - **Protected routes**: `authenticate` middleware (`src/middlewares/authenticate.middleware.ts`) verifies the `Authorization: Bearer <idToken>` header via `firebaseAuth.verifyIdToken`, then loads the local `User` row by `firebaseUid` and attaches it to `req.user`. A valid Firebase token for a user with no local `User` row is rejected (401) — Firebase and the local DB must stay in sync through `/auth/register`.
-- **RBAC**: `authorize(...roles)` (`src/middlewares/authorize.middleware.ts`) checks `req.user.role` against an allow-list, e.g. `authorize(Role.ADMIN)` on `GET /users`. Always chain it after `authenticate`.
+- **authenticate** verifies the token with `verifyIdToken(token, true)` (revoked tokens and disabled accounts are rejected) and accepts the `Bearer` scheme case-insensitively. Only Firebase `auth/*` errors become 401; anything else (network, DB) propagates as 500 so outages are not disguised as "invalid token". It also snapshots `req.params` into `res.locals.requestParams` for the audit trail.
+- **RBAC**: `authorize(...roles)` (`src/middlewares/authorize.middleware.ts`) checks `req.user.role` against an allow-list, e.g. `authorize(Role.ADMIN)` on `GET /users`. It throws at boot if called with no roles, and exposes its frozen role list under the `AUTHORIZED_ROLES` symbol so tests can inspect it. Route order is enforced by tests: `authenticate` first, `authorize` second, then `validate`/handler — never validate before authorizing.
+- **ABAC (ownership)**: attribute rules live in `src/shared/security/access-policy.ts` (`isOwner`, `isOwnerOrAdmin`, `assertOwner`, `assertOwnerOrAdmin` → 403). `PUT /collection-points/:id` is owner-only; operating hours are owner-or-admin (`ensureCanManageCollectionPoint`). Reuse these helpers instead of inline `if (x.ownerId !== req.user.id)` checks.
+- **Access matrix (governance)**: `tests/security/access-matrix.ts` is the reviewed source of truth for who may call every route (`PUBLIC`, `ANY_AUTHENTICATED` or a role list). `route-policy.spec.ts` introspects the real Express router and fails if a route is missing from the matrix, a matrix entry is stale, the roles in code differ, the guard order is wrong, or a write route is public outside `PUBLIC_WRITE_ALLOWLIST`. `rbac-matrix.spec.ts` then hits every protected route over HTTP with no token, malformed/forged/revoked tokens, an unregistered user and each of the 3 roles. **Adding or changing a route means updating the matrix** — that diff is what reviewers check.
+- **Audit trail**: `auditTrail` (global, right after `express.json()`) writes an `AuditLog` row on `res.finish` for every 403 by an authenticated user (`ACCESS_DENIED`) and every successful POST/PUT/PATCH/DELETE by one (`RESOURCE_CHANGED`), with userId, method, route **pattern** (never the raw URL), resource id param and status. Bodies, headers and tokens are never stored. Recording is fire-and-forget: a failing audit store logs `[audit-trail] failed to record entry` but never breaks the response. `AuditLog.userId` is nullable with `onDelete: SetNull`, so deleting a user (LGPD erasure) anonymizes their log rows instead of being blocked.
 - `req.user` typing is added via module augmentation in `src/types/express/index.d.ts`.
 - **Firebase ↔ DB consistency on register**: `RegisterUserUseCase` creates the Firebase user first; if the local `User` insert then fails, it deletes the Firebase user (compensation) before rethrowing. Without that, the email would be stuck as "already registered" (409) while having no local row (401 on every protected route). Keep this compensation pattern in any future flow that writes to both Firebase and the DB.
 
@@ -76,7 +93,7 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 This is a class project: the professor (orientador) owns a single **dev** Firebase project, and every student gets its credentials (`FIREBASE_*` in `.env`) through a private channel — students do not create their own Firebase project. Each student runs their **own** local MySQL (Docker). Consequences:
 
 - Firebase Auth users are shared across the whole class; `User` rows are per-machine. A user registered on one student's machine exists in Firebase but not in another student's DB: re-registering that email → 409, logging in works but protected routes → 401. This is expected, not a bug.
-- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`). Idempotent; refuses to run with `NODE_ENV=production`.
+- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes the collection-point `wasteCategories` JSON uses). Idempotent; refuses to run with `NODE_ENV=production`.
 - The seed is the only way to get an `ADMIN` in a fresh environment (no admin self-registration).
 - Never commit credentials, and a production deployment must use a separate Firebase project.
 
@@ -84,7 +101,7 @@ This is a class project: the professor (orientador) owns a single **dev** Fireba
 
 `prisma/schema.prisma` uses the newer `prisma-client` generator (TypeScript source, not the classic `@prisma/client` codegen), with `output = "../src/generated/prisma"`. It **must** be generated inside `src/`, not at the project root — `tsconfig.json` has `rootDir: "src"` + `include: ["src/**/*"]`, and since the generated files are plain `.ts` that gets compiled with the rest of the app (imported via relative paths, e.g. `src/config/prisma.ts`), anything outside `src` would fail with TS6059 (`rootDir` violation). `src/generated/` is gitignored (matched by the `generated/` rule) and regenerated via `npx prisma generate`.
 
-The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter (`PrismaMariaDb(env.DATABASE_URL)`), not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
+The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adapter, not the classic connection-string-in-schema approach — see `src/config/prisma.ts`. The adapter always creates a `mariadb` connection pool; `prisma.ts` passes it the `DATABASE_URL` string with pool options (`connectionLimit`, `acquireTimeout`, `idleTimeout`, `connectTimeout`) appended as query params from `DB_POOL_*`/`DB_CONNECT_TIMEOUT_MS` env vars, only when the URL doesn't already set them (URL wins). Keep passing the URL string rather than a parsed host/user/password object, so other driver options in the URL query aren't silently dropped. Default pool size 20 was chosen from load tests (throughput plateaus above ~20 connections; see README). That adapter wraps the `mariadb` npm package (MariaDB Corp.'s connector), which despite the name talks to plain MySQL servers fine over the MySQL wire protocol — including MySQL 8's default `caching_sha2_password` auth plugin, with no extra `allowPublicKeyRetrieval`-style flags needed (unlike `mysql2`/`mysql`). This is why `docker-compose.yml` uses a stock `mysql:8.4` image with no custom auth-plugin config.
 
 ### Local database (`docker-compose.yml`)
 
@@ -93,6 +110,21 @@ The Prisma client is instantiated with the `@prisma/adapter-mariadb` driver adap
 ### Config (`src/config/`)
 
 `env.ts` validates `process.env` with Zod at import time and throws immediately if anything is missing/invalid — this is the first thing that runs (imported transitively by nearly everything), so a missing env var fails fast at boot rather than surfacing as a runtime error deep in a request. `firebase.ts` and `prisma.ts` both depend on `env` being valid. `swagger.ts` builds the OpenAPI spec from JSDoc `@openapi` comments in `src/modules/**/presentation/*.routes.ts` (glob path is relative to `process.cwd()`, i.e. only works when run from the project root — this only picks up routes documented with `@openapi` blocks, and only from `.ts` source, so it will not find routes after a production `dist/` build; acceptable for now since Swagger is a dev-time contract tool).
+
+### Places / Google Maps (`src/modules/places/`)
+
+Public proxy to **Places API (New)** for the address search box of the web and mobile apps, so the Google key only exists on the server (the apps keep only their platform-restricted map-rendering keys).
+
+- `GET /places/autocomplete?input=&sessionToken=&latitude=&longitude=` → `[{ placeId, title, subtitle }]`
+- `GET /places/:placeId?sessionToken=` → `{ label, latitude, longitude, viewport?: { southWest, northEast } }`
+
+Rules worth keeping when touching it:
+
+- `GOOGLE_MAPS_API_KEY` is **optional** in `env.ts` (so classmates without a key can still boot); `GooglePlacesClient` answers 503 when it is missing. It is sent only in the `X-Goog-Api-Key` header, never in a URL, and the key should be restricted in Google Cloud to Places API (New) + the server's IP.
+- Every input is validated with `z.strictObject` before any Google call (unknown/repeated params rejected, `input` 3–200 chars without control chars, `sessionToken`/`placeId` limited to `[A-Za-z0-9_-]`, latitude/longitude parsed from strict decimal strings, both or neither). `validate(schema, "query" | "params")` replaces `req.query`/`req.params` with the parsed values via `Object.defineProperty`, since Express 5's `req.query` is a getter.
+- Google's response is also validated with Zod. Google errors never reach the client: details 400/404 → 404, timeout (5s)/network/429 → 503, anything else → 502. Logs carry only Google's status code, never the key or the query text.
+- Per-IP limiters on top of the global one: autocomplete 30/min, details 15/min. Responses are `Cache-Control: no-store` (Google's terms forbid caching Places content).
+- Fixed `languageCode: pt-BR`, `regionCode`/`includedRegionCodes: br`; results are biased to a 30 km circle around the client's coordinates, or around Manhuaçu when none are sent.
 
 ### Path alias
 
@@ -106,14 +138,14 @@ This repo is only the `API Backend` container in the project's C4 model. The doc
 - **Mobile app**: React Native + NativeWind + Expo (Managed Workflow) — end-user (citizen/collector) app.
 - **Push notifications**: Expo Push API (delivers via APNs/FCM).
 - **Geolocation/maps**: Google Maps Platform (geocoding, map rendering, route opening).
-- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo currently just points `DATABASE_URL` at a single MySQL instance via `@prisma/adapter-mariadb`.
+- **DB infra (documented target, not yet set up here)**: MySQL/InnoDB with Master-Slave replication for HA, `mysqldump` scheduled backups, connection pooling, query optimization — this repo points `DATABASE_URL` at a single MySQL instance; app-level pooling is configured (see Prisma section), while ProxySQL is deferred until there are replicas to route between.
 - **Testing**: Jest is the documented choice for unit/integration tests (not set up in this repo yet).
 - **PM process**: Scrum + Jira (sprints, backlog, burndown) — not tooling relevant to this codebase.
 - Possible future backend migration to **NestJS** if complexity grows (explicitly called out as optional, not a current requirement — stick with Express/Clean-Architecture-by-module as-is unless asked).
 
 ### Data model reference (from the docs' ER/class diagrams)
 
-Only `User` exists in `prisma/schema.prisma` so far. When implementing `collection-points`/`disposals`/`reports`, the documented relational model (Portuguese names translated here to this project's English-identifier convention) is:
+Most of the tables below already exist in `prisma/schema.prisma` (some still unused by any route, e.g. `Geolocation`, `Collection`, `DisposalRecord`, `Review`). The documented relational model (Portuguese names translated here to this project's English-identifier convention) is:
 
 - **CollectionPoint** (`PONTO_COLETA`): id, collectorId (FK → User), name, city, latitude (decimal 10,8), longitude (decimal 11,8), whatsappContact, approvalStatus, credentialedAt, updatedAt, deletedAt (soft delete). Many-to-many with waste categories via a join table (`PONTO_CATEGORIA`).
 - **OperatingHours** (`HORARIO_FUNCIONAMENTO`): id, collectionPointId (FK), weekday, openTime, closeTime.

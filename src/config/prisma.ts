@@ -1,36 +1,48 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../generated/prisma/client";
+import { buildConnectionUrl } from "./database-url";
 import { env } from "./env";
 
+const connectionOptions = {
+  connectionLimit: env.DB_POOL_LIMIT,
+  acquireTimeout: env.DB_POOL_ACQUIRE_TIMEOUT_MS,
+  idleTimeout: env.DB_POOL_IDLE_TIMEOUT_S,
+  connectTimeout: env.DB_CONNECT_TIMEOUT_MS,
+  // MySQL 8.4 uses caching_sha2_password: the first login after the server starts, without
+  // TLS, needs the server's RSA public key. Dev only — in production use TLS instead.
+  ...(process.env.NODE_ENV !== "production" && { allowPublicKeyRetrieval: true }),
+};
+
 function createPrismaClient(connectionUrl: string) {
-  const databaseUrl = new URL(connectionUrl);
-
-  const adapter = new PrismaMariaDb({
-    host: databaseUrl.hostname,
-    port: Number(databaseUrl.port || 3306),
-    user: decodeURIComponent(databaseUrl.username),
-    password: decodeURIComponent(databaseUrl.password),
-    database: databaseUrl.pathname.slice(1),
-
-    // MySQL 8.4 usa caching_sha2_password: no primeiro login sem TLS o driver precisa
-    // buscar a chave pública do servidor. Só habilitado fora de produção (em produção, use TLS).
-    allowPublicKeyRetrieval: process.env.NODE_ENV !== "production",
-
-    // Configuração da POOL
-    connectionLimit: 10, // limita a pool em 10 conexões
-    acquireTimeout: 10_000, // limita a espera em ms para adquirir uma conexão
-    connectTimeout: 5_000, // limita o tempo de estabelecimento de conexão
-    idleTimeout: 300, // tempo de inatividade
-  });
+  const adapter = new PrismaMariaDb(buildConnectionUrl(connectionUrl, connectionOptions));
 
   return new PrismaClient({ adapter });
 }
 
-// Primário (master): toda escrita e leitura transacional.
+type ReadMethod =
+  | "findUnique"
+  | "findUniqueOrThrow"
+  | "findFirst"
+  | "findFirstOrThrow"
+  | "findMany"
+  | "count"
+  | "aggregate"
+  | "groupBy";
+
+type ModelName = {
+  [K in keyof PrismaClient]: K extends `$${string}` | symbol ? never : K;
+}[keyof PrismaClient];
+
+/** Only the read methods of each model, plus raw SELECTs: writes don't compile. */
+export type ReadOnlyPrismaClient = {
+  [K in ModelName]: Pick<PrismaClient[K], Extract<keyof PrismaClient[K], ReadMethod>>;
+} & Pick<PrismaClient, "$queryRaw" | "$disconnect">;
+
+// Primary (master): every write and every transactional read.
 export const prisma = createPrismaClient(env.DATABASE_URL);
 
-// Réplica somente leitura: use apenas em consultas pesadas de relatório/dashboard.
-// Sem DATABASE_REPLICA_URL (ex.: ambiente sem réplica), as leituras caem no primário.
-export const prismaRead = env.DATABASE_REPLICA_URL
+// Read-only replica: use it ONLY for heavy report/dashboard queries, which tolerate a few
+// seconds of replication lag. Without DATABASE_REPLICA_URL the reads fall back to the primary.
+export const prismaRead: ReadOnlyPrismaClient = env.DATABASE_REPLICA_URL
   ? createPrismaClient(env.DATABASE_REPLICA_URL)
   : prisma;

@@ -1,11 +1,20 @@
 import { Router } from "express";
+import { env } from "../../../config/env";
 import { prisma } from "../../../config/prisma";
 import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
 import { AppError } from "../../../shared/errors/AppError";
-import { collectionPointSchema, reviewSchema } from "./collection-points.validators";
+import { distanceInKm } from "../../../shared/geo/distance";
+import { assertOwner } from "../../../shared/security/access-policy";
+import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
+import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
+import {
+  collectionPointSchema,
+  reviewSchema,
+  type CollectionPointInput,
+} from "./collection-points.validators";
 
 export const collectionPointsRoutes = Router();
 
@@ -16,6 +25,35 @@ const pointWithCollector = {
 // Moderation details are internal — never expose them on the public map.
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 
+const wasteTypes = [
+  "PLASTIC",
+  "PAPER",
+  "METALS",
+  "GLASS",
+  "COOKING_OIL",
+  "ELECTRONICS",
+  "BATTERIES",
+  "CELL_PHONES",
+  "COMPUTERS",
+  "PRINTERS",
+  "TELEVISIONS",
+] as const;
+
+const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
+
+async function withResolvedLocation(body: CollectionPointInput) {
+  const { latitude, longitude, placeId, ...point } = body;
+  const location = await resolveLocation.execute({ latitude, longitude, placeId });
+
+  return {
+    ...point,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    locationSource: location.source,
+    placeId: location.placeId,
+  };
+}
+
 /**
  * @openapi
  * /collection-points:
@@ -25,23 +63,98 @@ const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true
  *     parameters:
  *       - in: query
  *         name: city
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: Filter by city
+ *       - in: query
+ *         name: wasteType
+ *         schema:
+ *           type: string
+ *           enum: [PLASTIC, PAPER, METALS, GLASS, COOKING_OIL, ELECTRONICS, BATTERIES, CELL_PHONES, COMPUTERS, PRINTERS, TELEVISIONS]
+ *         description: Filter by waste type
+ *       - in: query
+ *         name: latitude
+ *         schema:
+ *           type: number
+ *         description: Latitude de referência para busca por proximidade
+ *       - in: query
+ *         name: longitude
+ *         schema:
+ *           type: number
+ *         description: Longitude de referência para busca por proximidade
+ *       - in: query
+ *         name: radius
+ *         schema:
+ *           type: number
+ *           minimum: 0
+ *         description: Raio máximo da busca em quilômetros
  *     responses:
  *       200:
  *         description: Public collection points (approved only)
  */
 collectionPointsRoutes.get("/collection-points", async (req, res) => {
-  const city = typeof req.query.city === "string" ? req.query.city : undefined;
+  const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
+
+  const wasteType =
+    typeof req.query.wasteType === "string" ? req.query.wasteType.trim() : undefined;
+
+  if (wasteType && !wasteTypes.includes(wasteType as (typeof wasteTypes)[number])) {
+    throw new AppError(`Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`, 400);
+  }
+
+  const latitude = typeof req.query.latitude === "string" ? Number(req.query.latitude) : undefined;
+
+  const longitude =
+    typeof req.query.longitude === "string" ? Number(req.query.longitude) : undefined;
+
+  const radius = typeof req.query.radius === "string" ? Number(req.query.radius) : undefined;
+  if (
+    (latitude !== undefined && !Number.isFinite(latitude)) ||
+    (longitude !== undefined && !Number.isFinite(longitude)) ||
+    (radius !== undefined && (!Number.isFinite(radius) || radius <= 0))
+  ) {
+    throw new AppError("Latitude, longitude ou raio inválido.", 400);
+  }
+
+  if (
+    (latitude === undefined) !== (longitude === undefined) ||
+    (radius !== undefined && (latitude === undefined || longitude === undefined))
+  ) {
+    throw new AppError("Informe latitude e longitude juntas; o raio exige ambas.", 400);
+  }
+
+  if (
+    (latitude !== undefined && (latitude < -90 || latitude > 90)) ||
+    (longitude !== undefined && (longitude < -180 || longitude > 180))
+  ) {
+    throw new AppError("Coordenadas fora dos limites válidos.", 400);
+  }
   const points = await prisma.collectionPoint.findMany({
     where: {
       status: CollectionPointStatus.APPROVED,
       ...(city ? { city: { equals: city } } : {}),
+      ...(wasteType ? { wasteCategories: { array_contains: [wasteType] } } : {}),
     },
     omit: publicOmit,
     orderBy: { name: "asc" },
   });
+  const filteredPoints =
+    latitude !== undefined && longitude !== undefined && radius !== undefined
+      ? points.filter((point) => {
+          if (point.latitude == null || point.longitude == null) {
+            return false;
+          }
+
+          const distance = distanceInKm(
+            { latitude, longitude },
+            { latitude: Number(point.latitude), longitude: Number(point.longitude) },
+          );
+
+          return distance <= radius;
+        })
+      : points;
   res.status(200).json(
-    points.map((point) => ({
+    filteredPoints.map((point) => ({
       ...point,
       whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
     })),
@@ -113,6 +226,12 @@ collectionPointsRoutes.get(
  *     responses:
  *       201:
  *         description: Point submitted for approval
+ *       400:
+ *         description: Malformed request body
+ *       422:
+ *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
+ *       503:
+ *         description: Address verification service unavailable
  */
 collectionPointsRoutes.post(
   "/collection-points",
@@ -121,7 +240,7 @@ collectionPointsRoutes.post(
   validate(collectionPointSchema),
   async (req, res) => {
     const point = await prisma.collectionPoint.create({
-      data: { ...req.body, collectorId: req.user!.id },
+      data: { ...(await withResolvedLocation(req.body)), collectorId: req.user!.id },
     });
     res.status(201).json(point);
   },
@@ -178,6 +297,8 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
  *     responses:
  *       200:
  *         description: Updated point resubmitted for approval
+ *       422:
+ *         description: Missing or invalid location
  */
 collectionPointsRoutes.put(
   "/collection-points/:id",
@@ -190,18 +311,22 @@ collectionPointsRoutes.put(
       where: { id: pointId },
     });
     if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
-    if (existing.collectorId !== req.user!.id) {
-      throw new AppError("Você só pode atualizar seus próprios pontos de coleta", 403);
-    }
+    assertOwner(
+      req.user!,
+      existing.collectorId,
+      "Você só pode atualizar seus próprios pontos de coleta",
+    );
 
     const point = await prisma.collectionPoint.update({
       where: { id: existing.id },
       data: {
-        ...req.body,
+        ...(await withResolvedLocation(req.body)),
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,
         reviewedById: null,
         reviewedAt: null,
+        hoursConfirmedAt: new Date(),
+        isOutdated: false,
       },
     });
     res.status(200).json(point);

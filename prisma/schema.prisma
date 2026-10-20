@@ -20,6 +20,11 @@ enum CollectionPointStatus {
   INACTIVE
 }
 
+enum LocationSource {
+  GPS_COORDINATES
+  VERIFIED_ADDRESS
+}
+
 enum Weekday {
   MONDAY
   TUESDAY
@@ -53,6 +58,8 @@ model User {
   disposalRecords  DisposalRecord[]
   reviews          Review[]
   auditLogs        AuditLog[]
+
+  @@index([createdAt])
 }
 
 model CollectionPoint {
@@ -65,6 +72,8 @@ model CollectionPoint {
   address             String
   latitude            Decimal               @db.Decimal(10, 8)
   longitude           Decimal               @db.Decimal(11, 8)
+  locationSource      LocationSource        @default(GPS_COORDINATES)
+  placeId             String?               @db.VarChar(512)
   whatsappContact     String?
   showWhatsappContact Boolean               @default(false)
   wasteCategories     Json
@@ -74,6 +83,8 @@ model CollectionPoint {
   reviewedById        String?
   reviewedBy          User?                 @relation("ReviewedPoints", fields: [reviewedById], references: [id])
   reviewedAt          DateTime?
+  hoursConfirmedAt    DateTime              @default(now())
+  isOutdated          Boolean               @default(false)
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
@@ -87,6 +98,7 @@ model CollectionPoint {
   @@index([status, city])
   @@index([collectorId])
   @@index([reviewedById])
+  @@index([isOutdated, hoursConfirmedAt])
 }
 
 model WasteCategory {
@@ -94,6 +106,8 @@ model WasteCategory {
   name        String  @unique
   description String? @db.VarChar(500)
   active      Boolean @default(true)
+
+  educationalContents EducationalContent[]
 
   points          PointCategory[]
   disposalRecords DisposalRecord[]
@@ -118,6 +132,18 @@ model PointCategory {
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+}
+
+model EducationalContent {
+  id         String        @id @default(uuid())
+  title      String
+  content    String        @db.Text
+  categoryId String
+  category   WasteCategory @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([categoryId])
 }
 
 // Horários de funcionamento de cada ponto de coleta
@@ -200,6 +226,7 @@ model DisposalRecord {
   @@index([collectionId])
   @@index([disposedAt, status])
   @@index([collectionPointId, disposedAt])
+  @@index([status, disposedAt, categoryId, weightKg, pointsEarned], map: "DisposalRecord_report_cov_idx")
 }
 
 // Avaliação feita por cidadão sobre um ponto de coleta
@@ -220,10 +247,17 @@ model Review {
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String
-  action    String
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  method     String?  @db.VarChar(10)
+  route      String?
+  resourceId String?
+  statusCode Int?
+  createdAt  DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }

@@ -5,10 +5,22 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_REPLICA_URL: z.string().min(1).optional(),
   PORT: z.coerce.number().int().positive().default(3333),
+  DB_POOL_LIMIT: z.coerce.number().int().positive().default(20),
+  DB_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+  DB_POOL_IDLE_TIMEOUT_S: z.coerce.number().int().positive().default(300),
+  DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().min(1),
   FIREBASE_PRIVATE_KEY: z.string().min(1),
   FIREBASE_API_KEY: z.string().min(1),
+  // Server-side key for Places API (New). Optional so the API still boots without it;
+  // the /places routes answer 503 until it is set. Never expose it to the web/mobile apps.
+  GOOGLE_MAPS_API_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || undefined),
 });
 
 const parsed = envSchema.safeParse(process.env);
