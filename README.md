@@ -52,7 +52,7 @@ Isso baixa tudo que está listado no `package.json` (Express, Prisma, Firebase A
 
 ## 4. Subir um banco MySQL
 
-O jeito recomendado é usar o `docker-compose.yml` que já está na raiz do projeto — ele sobe um MySQL com o banco, usuário e senha já criados, com os dados persistidos num volume (não se perdem se você desligar o container).
+O jeito recomendado é usar o `docker-compose.yml` que já está na raiz do projeto — ele sobe um MySQL com o banco, usuário e senha já criados, com os dados persistidos num volume (não se perdem se você desligar o container), e uma **réplica somente leitura** dele na porta `3308` (veja [Réplica de leitura](#réplica-de-leitura-master-slave)).
 
 ```bash
 npm run db:up
@@ -62,7 +62,7 @@ Esse comando (`docker compose up -d --wait`) só retorna depois que o MySQL esti
 
 As credenciais já vêm prontas no `docker-compose.yml`: banco `ecoponto`, usuário `ecoponto_app`, senha `SENHA`, porta `3306` (se você mudar algum desses valores no `docker-compose.yml`, reflita a mudança no `DATABASE_URL` do `.env` no passo 6).
 
-> **Porta 3306 já em uso?** Se você tiver um MySQL local rodando na mesma porta, o `db:up` vai falhar. Troque o mapeamento de porta no `docker-compose.yml` (ex: `"3307:3306"`) e ajuste a porta no `DATABASE_URL`.
+> **Porta 3306 (ou 3308) já em uso?** Se você tiver um MySQL local rodando na mesma porta, o `db:up` vai falhar. Defina outra porta com `MYSQL_PORT` (primário) ou `MYSQL_REPLICA_PORT` (réplica) no `.env` — o Docker Compose lê esse arquivo — e ajuste a porta no `DATABASE_URL` / `DATABASE_REPLICA_URL`.
 
 Se preferir MySQL instalado localmente (sem Docker), crie o banco e o usuário manualmente com essas mesmas credenciais (ou outras de sua escolha) usando o MySQL Workbench ou a linha de comando.
 
@@ -106,6 +106,7 @@ FIREBASE_API_KEY="chave-recebida"
 ```
 
 - `DATABASE_URL` já vem certo para o MySQL do Docker (passo 4). Só mude se alterou usuário/senha/porta no `docker-compose.yml`.
+- `DATABASE_REPLICA_URL` aponta para a réplica do Docker. Se você usa MySQL sem Docker (sem réplica), deixe vazio: as consultas de relatório passam a usar o `DATABASE_URL`.
 - Mantenha a `FIREBASE_PRIVATE_KEY` **entre aspas e numa linha só**, com os `\n` literais, exatamente como foi recebida.
 - As variáveis do pool de conexões (`DB_POOL_*`, `DB_CONNECT_TIMEOUT_MS`) e o `RATE_LIMIT_MAX` são opcionais — se não estiverem no `.env`, valem os padrões descritos em [Pool de conexões e teste de carga](#pool-de-conexões-e-teste-de-carga).
 
@@ -248,6 +249,7 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 | `npm run db:up`                        | Sobe o MySQL via Docker Compose e espera ele ficar saudável                      |
 | `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                         |
 | `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                            |
+| `npm run db:replica:status`            | Mostra o estado da replicação (`SHOW REPLICA STATUS`) da réplica de leitura      |
 | `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                  |
 | `npm run db:migrate -- --name <nome>`  | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)            |
 | `npm run db:migrate:status`            | Mostra quais migrations já foram aplicadas no banco                              |
@@ -285,7 +287,33 @@ npm run load-test
 
 Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_PATH` (padrão `/collection-points`) e `LOAD_TEST_URL`. O comando termina com erro se qualquer requisição falhar. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
 
-**ProxySQL:** fica para quando houver réplicas do MySQL (master/slave, previsto na arquitetura). Com um único servidor, o pool da própria aplicação já absorve os picos, como mostra o teste acima.
+Cada cliente Prisma (primário e réplica) tem o seu próprio pool, com os mesmos limites.
+
+**ProxySQL:** não é usado. Com uma única réplica, a escolha entre primário e réplica é feita no código (`prisma` x `prismaRead`, veja abaixo) e o pool da própria aplicação já absorve os picos, como mostra o teste acima.
+
+## Réplica de leitura (master-slave)
+
+O `docker-compose.yml` sobe dois MySQL: o **primário** (`mysql`, porta `3306`), que recebe toda escrita, e uma **réplica** (`mysql-replica`, porta `3308`), que recebe as mudanças do primário pela replicação do MySQL (GTID) e serve só para **consultas pesadas de relatório/dashboard**, sem disputar recursos com as transações da API.
+
+No código (`src/config/prisma.ts`):
+
+| Cliente      | Banco                                                    | Use para                                                                     |
+| ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `prisma`     | primário (`DATABASE_URL`)                                | tudo: escritas e leituras normais da API                                     |
+| `prismaRead` | réplica (`DATABASE_REPLICA_URL`), ou o primário se vazio | **somente** relatórios/dashboards que aceitam dados de alguns segundos atrás |
+
+A escrita fica só no primário, garantida em três camadas:
+
+1. `prismaRead` só expõe métodos de leitura — `create`/`update`/`delete`/`$executeRaw` nem compilam;
+2. a réplica é acessada pelo usuário `ecoponto_reader`, que só tem `SELECT`;
+3. a réplica roda com `super_read_only`, que bloqueia escrita até do `root` — só a replicação escreve nela.
+
+Não use `prismaRead` para ler algo logo depois de gravar (ex: devolver o registro recém-criado): a réplica pode estar um pouco atrás do primário.
+
+- O `db:up` só termina quando a replicação está **rodando** (o healthcheck da réplica confere as threads de IO e SQL). Para ver detalhes ou erros: `npm run db:replica:status`.
+- As migrations rodam só no primário (`DATABASE_URL`); as tabelas chegam à réplica pela replicação.
+- **Volume criado antes da réplica?** O usuário de replicação, o `ecoponto_reader` e o histórico de GTID só existem em volumes criados a partir desta versão. Se a réplica não ficar saudável no `db:up`, rode `npm run db:reset` (**apaga os dados locais**), depois `npm run db:migrate` e `npm run db:seed`.
+- Em produção a réplica não seria esse container: use TLS na conexão (o `allowPublicKeyRetrieval` só é ligado fora de produção) e senhas próprias, fora do repositório.
 
 ## Cadastro de ponto: como enviar a localização
 

@@ -3,6 +3,12 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  // Read-only replica for report/dashboard queries. Empty or unset → reads use DATABASE_URL.
+  DATABASE_REPLICA_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || undefined),
   PORT: z.coerce.number().int().positive().default(3333),
   DB_POOL_LIMIT: z.coerce.number().int().positive().default(20),
   DB_POOL_ACQUIRE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
