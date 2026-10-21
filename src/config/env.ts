@@ -57,6 +57,10 @@ const envSchema = z.object({
     .trim()
     .optional()
     .transform((value) => value || undefined),
+  // Daily caps on paid Google Places calls (reset at midnight America/Sao_Paulo).
+  // 250/day × 31 days = 7,750/month, below the 10,000 free calls/month of each SKU.
+  PLACES_AUTOCOMPLETE_DAILY_LIMIT: z.coerce.number().int().nonnegative().default(250),
+  PLACES_DETAILS_DAILY_LIMIT: z.coerce.number().int().nonnegative().default(250),
 });
 
 const parsed = envSchema.safeParse(process.env);

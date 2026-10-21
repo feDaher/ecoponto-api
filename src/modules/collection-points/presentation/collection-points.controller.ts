@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
-import { env } from "../../../config/env";
-import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
+import { placesGateway } from "../../places/infra/places-gateway";
 import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
 import { PrismaWasteCategoryRepository } from "../../waste-categories/infra/repositories/PrismaWasteCategoryRepository";
 import { PrismaCollectionPointRepository } from "../infra/repositories/PrismaCollectionPointRepository";
@@ -21,9 +20,8 @@ import type {
 
 const pointRepository = new PrismaCollectionPointRepository();
 const categoryRepository = new PrismaWasteCategoryRepository();
-const locationResolver = new ResolveLocationUseCase(
-  new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY),
-);
+// Shared gateway: address verification counts toward the same daily Google Places limit.
+const locationResolver = new ResolveLocationUseCase(placesGateway);
 const createUseCase = new CreateCollectionPointUseCase(
   pointRepository,
   categoryRepository,

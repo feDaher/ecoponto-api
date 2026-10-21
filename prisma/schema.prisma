@@ -297,3 +297,14 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([createdAt(sort: Desc), id(sort: Desc)])
 }
+
+// Daily count of paid Google Places calls, used to stay inside the free monthly tier.
+// day is the calendar date in America/Sao_Paulo ("YYYY-MM-DD").
+model PlacesApiUsage {
+  sku       String   @db.VarChar(40)
+  day       String   @db.Char(10)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([sku, day])
+}

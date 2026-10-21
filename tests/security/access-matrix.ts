@@ -70,6 +70,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /admin/educational-content/:id": [ADMIN],
 
   "GET /places/autocomplete": PUBLIC,
+  "GET /places/usage": [ADMIN],
   "GET /places/:placeId": PUBLIC,
 
   "GET /reports/summary": [ADMIN, COLLECTOR],
