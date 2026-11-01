@@ -77,7 +77,6 @@ model CollectionPoint {
   whatsappContact     String?
   showWhatsappContact Boolean               @default(false)
   wasteCategories     Json
-  operatingHours      Json
   status              CollectionPointStatus @default(PENDING)
   rejectionReason     String?               @db.Text
   reviewedById        String?
