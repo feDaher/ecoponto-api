@@ -8,12 +8,15 @@ import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
 import { AppError } from "../../../shared/errors/AppError";
 import { distanceInKm } from "../../../shared/geo/distance";
 import { assertOwner } from "../../../shared/security/access-policy";
+import { fromTime, toTime } from "../../../shared/time/time-of-day";
 import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
 import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
 import {
   collectionPointSchema,
+  collectionPointUpdateSchema,
   reviewSchema,
   type CollectionPointInput,
+  type CollectionPointUpdateInput,
 } from "./collection-points.validators";
 
 export const collectionPointsRoutes = Router();
@@ -21,6 +24,37 @@ export const collectionPointsRoutes = Router();
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
+
+// Horários vêm sempre da tabela OperatingHours (somente os ativos).
+const hoursInclude = {
+  hours: {
+    where: { isActive: true },
+    orderBy: [{ weekday: "asc" as const }, { openTime: "asc" as const }],
+  },
+};
+
+function withFormattedHours<
+  T extends {
+    hours: {
+      id: string;
+      weekday: string;
+      openTime: Date;
+      closeTime: Date;
+      isActive: boolean;
+    }[];
+  },
+>(point: T) {
+  return {
+    ...point,
+    hours: point.hours.map(({ id, weekday, openTime, closeTime, isActive }) => ({
+      id,
+      weekday,
+      openTime: fromTime(openTime),
+      closeTime: fromTime(closeTime),
+      isActive,
+    })),
+  };
+}
 
 // Moderation details are internal — never expose them on the public map.
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
@@ -41,7 +75,7 @@ const wasteTypes = [
 
 const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
 
-async function withResolvedLocation(body: CollectionPointInput) {
+async function withResolvedLocation(body: CollectionPointUpdateInput) {
   const { latitude, longitude, placeId, ...point } = body;
   const location = await resolveLocation.execute({ latitude, longitude, placeId });
 
@@ -90,7 +124,7 @@ async function withResolvedLocation(body: CollectionPointInput) {
  *         description: Raio máximo da busca em quilômetros
  *     responses:
  *       200:
- *         description: Public collection points (approved only)
+ *         description: Public collection points (approved only), each with its active operating hours in the hours field
  */
 collectionPointsRoutes.get("/collection-points", async (req, res) => {
   const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
@@ -136,6 +170,7 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
       ...(wasteType ? { wasteCategories: { array_contains: [wasteType] } } : {}),
     },
     omit: publicOmit,
+    include: hoursInclude,
     orderBy: { name: "asc" },
   });
   const filteredPoints =
@@ -155,7 +190,7 @@ collectionPointsRoutes.get("/collection-points", async (req, res) => {
       : points;
   res.status(200).json(
     filteredPoints.map((point) => ({
-      ...point,
+      ...withFormattedHours(point),
       whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
     })),
   );
@@ -179,9 +214,10 @@ collectionPointsRoutes.get(
   async (req, res) => {
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId: req.user!.id },
+      include: hoursInclude,
       orderBy: { updatedAt: "desc" },
     });
-    res.status(200).json(points);
+    res.status(200).json(points.map(withFormattedHours));
   },
 );
 
@@ -203,10 +239,10 @@ collectionPointsRoutes.get(
   async (_req, res) => {
     const points = await prisma.collectionPoint.findMany({
       where: { status: CollectionPointStatus.PENDING },
-      include: pointWithCollector,
+      include: { ...pointWithCollector, ...hoursInclude },
       orderBy: { createdAt: "asc" },
     });
-    res.status(200).json(points);
+    res.status(200).json(points.map(withFormattedHours));
   },
 );
 
@@ -225,7 +261,7 @@ collectionPointsRoutes.get(
  *             $ref: '#/components/schemas/CollectionPointInput'
  *     responses:
  *       201:
- *         description: Point submitted for approval
+ *         description: Point submitted for approval, with its operating hours (field `hours`, read from the OperatingHours table)
  *       400:
  *         description: Malformed request body
  *       422:
@@ -239,10 +275,25 @@ collectionPointsRoutes.post(
   authorize(Role.COLLECTOR),
   validate(collectionPointSchema),
   async (req, res) => {
+    const { operatingHours, ...pointData } = req.body as CollectionPointInput;
+    const location = await withResolvedLocation(pointData);
+
+    // O create aninhado do Prisma roda ponto + horários na mesma transação.
     const point = await prisma.collectionPoint.create({
-      data: { ...(await withResolvedLocation(req.body)), collectorId: req.user!.id },
+      data: {
+        ...location,
+        collectorId: req.user!.id,
+        hours: {
+          create: operatingHours.map((hour) => ({
+            weekday: hour.weekday,
+            openTime: toTime(hour.openTime),
+            closeTime: toTime(hour.closeTime),
+          })),
+        },
+      },
+      include: hoursInclude,
     });
-    res.status(201).json(point);
+    res.status(201).json(withFormattedHours(point));
   },
 );
 
@@ -259,7 +310,7 @@ collectionPointsRoutes.post(
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Approved collection point
+ *         description: Approved collection point, with its active operating hours in the hours field
  *       404:
  *         description: Point not found or not approved
  */
@@ -268,10 +319,11 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
   const point = await prisma.collectionPoint.findFirst({
     where: { id: pointId, status: CollectionPointStatus.APPROVED },
     omit: publicOmit,
+    include: hoursInclude,
   });
   if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
   res.status(200).json({
-    ...point,
+    ...withFormattedHours(point),
     whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
   });
 });
@@ -293,10 +345,10 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CollectionPointInput'
+ *             $ref: '#/components/schemas/CollectionPointUpdateInput'
  *     responses:
  *       200:
- *         description: Updated point resubmitted for approval
+ *         description: Updated point resubmitted for approval. Operating hours are not changed here; use /collection-points/{id}/operating-hours
  *       422:
  *         description: Missing or invalid location
  */
@@ -304,7 +356,7 @@ collectionPointsRoutes.put(
   "/collection-points/:id",
   authenticate,
   authorize(Role.COLLECTOR),
-  validate(collectionPointSchema),
+  validate(collectionPointUpdateSchema),
   async (req, res) => {
     const pointId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const existing = await prisma.collectionPoint.findUnique({
@@ -317,6 +369,7 @@ collectionPointsRoutes.put(
       "Você só pode atualizar seus próprios pontos de coleta",
     );
 
+    // Horários não são alterados aqui: só pelas rotas /collection-points/:id/operating-hours.
     const point = await prisma.collectionPoint.update({
       where: { id: existing.id },
       data: {
@@ -325,11 +378,10 @@ collectionPointsRoutes.put(
         rejectionReason: null,
         reviewedById: null,
         reviewedAt: null,
-        hoursConfirmedAt: new Date(),
-        isOutdated: false,
       },
+      include: hoursInclude,
     });
-    res.status(200).json(point);
+    res.status(200).json(withFormattedHours(point));
   },
 );
 
