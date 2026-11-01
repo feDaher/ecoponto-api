@@ -1,5 +1,6 @@
 import { prisma } from "../../../../config/prisma";
 import type { CreateUserData, IUserRepository } from "../../domain/repositories/IUserRepository";
+import type { Role } from "../../../../generated/prisma/enums";
 
 export class PrismaUserRepository implements IUserRepository {
   create(data: CreateUserData) {
@@ -16,5 +17,19 @@ export class PrismaUserRepository implements IUserRepository {
 
   findMany() {
     return prisma.user.findMany();
+  }
+
+  updateBlockedStatus(id: string, isBlocked: boolean) {
+    return prisma.user.update({
+      where: { id },
+      data: { isBlocked },
+    });
+  }
+
+  updateRole(id: string, role: Role) {
+    return prisma.user.update({
+      where: { id },
+      data: { role },
+    });
   }
 }
