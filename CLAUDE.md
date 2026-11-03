@@ -55,9 +55,9 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 
 `src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/` still talks to Prisma straight from its routes (pending refactor into use-cases); `waste-categories/`, `operating-hours/` and `educational-content/` already follow the layered shape. `waste-categories/` is the single module for the category taxonomy — reuse its repository instead of creating another one.
 
-### Collection point data that exists in two places
+### Collection point categories and hours
 
-`CollectionPoint` still carries `wasteCategories` and `operatingHours` as JSON (written by `POST/PUT /collection-points` and used by the public search filter `wasteType` via `array_contains`), while the normalized `PointCategory` and `OperatingHours` tables are written by the `operating-hours/` module. Until they are unified, keep both in mind: the search reads the JSON, the per-point hours endpoint reads the table.
+Collection point categories are normalized through `PointCategory`, linked to active `WasteCategory` records by their `name` code. The `POST`/`PUT /collection-points` API accepts and returns `wasteCategories` as a list of codes for frontend compatibility; handlers translate that API field to relation writes, and public search filters through the relation. The BE-16 migration backfills existing JSON values before dropping the old column. `operatingHours` remains JSON on `CollectionPoint`, while the `OperatingHours` table is used by the per-point hours module.
 
 ### Collection point location (BE-04, RN04)
 
@@ -94,7 +94,7 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 This is a class project: the professor (orientador) owns a single **dev** Firebase project, and every student gets its credentials (`FIREBASE_*` in `.env`) through a private channel — students do not create their own Firebase project. Each student runs their **own** local MySQL (Docker). Consequences:
 
 - Firebase Auth users are shared across the whole class; `User` rows are per-machine. A user registered on one student's machine exists in Firebase but not in another student's DB: re-registering that email → 409, logging in works but protected routes → 401. This is expected, not a bug.
-- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes the collection-point `wasteCategories` JSON uses). Idempotent; refuses to run with `NODE_ENV=production`.
+- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes accepted by the collection-point API). Idempotent; refuses to run with `NODE_ENV=production`.
 - The seed is the only way to get an `ADMIN` in a fresh environment (no admin self-registration).
 - Never commit credentials, and a production deployment must use a separate Firebase project.
 

@@ -24,7 +24,11 @@ const validPoint = {
 function givenPointOwnedBy(ownerId: string) {
   const point = { id: POINT_ID, collectorId: ownerId };
   prisma.collectionPoint.findUnique.mockResolvedValue(point);
-  prisma.collectionPoint.update.mockResolvedValue({ ...point, ...validPoint });
+  prisma.collectionPoint.update.mockResolvedValue({
+    ...point,
+    ...validPoint,
+    categories: [{ category: { name: "PLASTIC" } }],
+  });
   prisma.operatingHours.findUnique.mockResolvedValue({
     id: HOURS_ID,
     collectionPointId: POINT_ID,
@@ -52,6 +56,9 @@ function givenPointOwnedBy(ownerId: string) {
 beforeEach(() => {
   resetPrismaMock();
   installIdentities();
+  prisma.wasteCategory.findMany.mockResolvedValue([
+    { id: "category-plastic", name: "PLASTIC", active: true },
+  ]);
 });
 
 describe("ABAC: collection point ownership", () => {
