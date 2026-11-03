@@ -25,22 +25,11 @@ export const collectionPointSchema = z
     whatsappContact: z.string().trim().min(8).optional(),
     showWhatsappContact: z.boolean().default(false),
     wasteCategories: z
-      .array(
-        z.enum([
-          "PLASTIC",
-          "PAPER",
-          "METALS",
-          "GLASS",
-          "COOKING_OIL",
-          "ELECTRONICS",
-          "BATTERIES",
-          "CELL_PHONES",
-          "COMPUTERS",
-          "PRINTERS",
-          "TELEVISIONS",
-        ]),
-      )
-      .min(1),
+      .array(z.string().trim().min(1).max(191))
+      .min(1)
+      .refine((categories) => new Set(categories).size === categories.length, {
+        message: "As categorias de resíduos não podem se repetir.",
+      }),
     operatingHours: z
       .array(
         z.object({

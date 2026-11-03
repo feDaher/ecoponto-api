@@ -34,9 +34,13 @@ beforeEach(() => {
   resetPrismaMock();
   installIdentities();
   mockGetDetails.mockReset();
+  prisma.wasteCategory.findMany.mockResolvedValue([
+    { id: "category-plastic", name: "PLASTIC", active: true },
+  ]);
   prisma.collectionPoint.create.mockImplementation(async ({ data }) => ({
     id: "point-1",
     ...data,
+    categories: [{ category: { name: "PLASTIC" } }],
   }));
 });
 
@@ -78,6 +82,7 @@ describe("POST /collection-points location validation (RN04)", () => {
         placeId: null,
         collectorId: users[Role.COLLECTOR].id,
       }),
+      include: { categories: { include: { category: { select: { name: true } } } } },
     });
     expect(mockGetDetails).not.toHaveBeenCalled();
   });
@@ -94,6 +99,7 @@ describe("POST /collection-points location validation (RN04)", () => {
         locationSource: LocationSource.VERIFIED_ADDRESS,
         placeId: "ChIJ_place",
       }),
+      include: { categories: { include: { category: { select: { name: true } } } } },
     });
   });
 
