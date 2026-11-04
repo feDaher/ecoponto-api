@@ -95,7 +95,9 @@ model CollectionPoint {
   disposalRecords DisposalRecord[]
   reviews         Review[]
 
-  @@index([status, city])
+  @@index([status, name])
+  @@index([status, city, name])
+  @@index([status, latitude, longitude])
   @@index([collectorId])
   @@index([reviewedById])
   @@index([isOutdated, hoursConfirmedAt])
