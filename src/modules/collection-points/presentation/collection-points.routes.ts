@@ -6,14 +6,18 @@ import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
 import { AppError } from "../../../shared/errors/AppError";
-import { distanceInKm } from "../../../shared/geo/distance";
 import { assertOwner } from "../../../shared/security/access-policy";
 import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
 import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
+import { SearchCollectionPointsUseCase } from "../domain/use-cases/SearchCollectionPointsUseCase";
+import { PrismaCollectionPointSearchRepository } from "../infra/repositories/PrismaCollectionPointSearchRepository";
+import { toPublicCollectionPoint } from "./collection-points.presenter";
 import {
   collectionPointSchema,
   reviewSchema,
+  searchCollectionPointsQuerySchema,
   type CollectionPointInput,
+  type SearchCollectionPointsQuery,
 } from "./collection-points.validators";
 
 export const collectionPointsRoutes = Router();
@@ -25,19 +29,9 @@ const pointWithCollector = {
 // Moderation details are internal — never expose them on the public map.
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 
-const wasteTypes = [
-  "PLASTIC",
-  "PAPER",
-  "METALS",
-  "GLASS",
-  "COOKING_OIL",
-  "ELECTRONICS",
-  "BATTERIES",
-  "CELL_PHONES",
-  "COMPUTERS",
-  "PRINTERS",
-  "TELEVISIONS",
-] as const;
+const searchCollectionPoints = new SearchCollectionPointsUseCase(
+  new PrismaCollectionPointSearchRepository(),
+);
 
 const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
 
@@ -58,108 +52,90 @@ async function withResolvedLocation(body: CollectionPointInput) {
  * @openapi
  * /collection-points:
  *   get:
- *     summary: List approved collection points for the public map
+ *     summary: Search approved collection points for the public map
+ *     description: >
+ *       Filters are optional and combinable (AND between filters, OR between the waste types of
+ *       `wasteType`). With `latitude` and `longitude` the results are ordered by distance and carry
+ *       `distanceKm`; adding `radius` also discards points farther than that. Without a reference
+ *       point the results are ordered by name.
  *     tags: [Collection Points]
  *     parameters:
  *       - in: query
  *         name: city
  *         schema:
  *           type: string
- *         description: Filter by city
+ *         description: Filter by city (case and accent insensitive)
  *       - in: query
  *         name: wasteType
  *         schema:
  *           type: string
- *           enum: [PLASTIC, PAPER, METALS, GLASS, COOKING_OIL, ELECTRONICS, BATTERIES, CELL_PHONES, COMPUTERS, PRINTERS, TELEVISIONS]
- *         description: Filter by waste type
+ *           example: PLASTIC,GLASS
+ *         description: One or more comma-separated waste types (PLASTIC, PAPER, METALS, GLASS, COOKING_OIL, ELECTRONICS, BATTERIES, CELL_PHONES, COMPUTERS, PRINTERS, TELEVISIONS)
  *       - in: query
  *         name: latitude
  *         schema:
  *           type: number
- *         description: Latitude de referência para busca por proximidade
+ *           minimum: -90
+ *           maximum: 90
+ *         description: Reference latitude for proximity search (requires longitude)
  *       - in: query
  *         name: longitude
  *         schema:
  *           type: number
- *         description: Longitude de referência para busca por proximidade
+ *           minimum: -180
+ *           maximum: 180
+ *         description: Reference longitude for proximity search (requires latitude)
  *       - in: query
  *         name: radius
  *         schema:
  *           type: number
- *           minimum: 0
- *         description: Raio máximo da busca em quilômetros
+ *           exclusiveMinimum: 0
+ *           maximum: 100
+ *         description: Maximum distance in kilometers from the reference point (requires latitude and longitude)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 500
+ *           default: 100
+ *         description: Maximum number of points returned
  *     responses:
  *       200:
  *         description: Public collection points (approved only)
+ *         headers:
+ *           X-Total-Count:
+ *             description: Number of points matching the filters, before `limit` is applied
+ *             schema:
+ *               type: integer
+ *       400:
+ *         description: Invalid filter
  */
-collectionPointsRoutes.get("/collection-points", async (req, res) => {
-  const city = typeof req.query.city === "string" ? req.query.city.trim() : undefined;
+collectionPointsRoutes.get(
+  "/collection-points",
+  validate(searchCollectionPointsQuerySchema, "query"),
+  async (req, res) => {
+    const { city, wasteType, latitude, longitude, radius, limit } =
+      req.query as unknown as SearchCollectionPointsQuery;
 
-  const wasteType =
-    typeof req.query.wasteType === "string" ? req.query.wasteType.trim() : undefined;
+    const { items, total } = await searchCollectionPoints.execute({
+      city,
+      wasteTypes: wasteType,
+      origin:
+        latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
+      radiusKm: radius,
+      limit,
+    });
 
-  if (wasteType && !wasteTypes.includes(wasteType as (typeof wasteTypes)[number])) {
-    throw new AppError(`Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`, 400);
-  }
-
-  const latitude = typeof req.query.latitude === "string" ? Number(req.query.latitude) : undefined;
-
-  const longitude =
-    typeof req.query.longitude === "string" ? Number(req.query.longitude) : undefined;
-
-  const radius = typeof req.query.radius === "string" ? Number(req.query.radius) : undefined;
-  if (
-    (latitude !== undefined && !Number.isFinite(latitude)) ||
-    (longitude !== undefined && !Number.isFinite(longitude)) ||
-    (radius !== undefined && (!Number.isFinite(radius) || radius <= 0))
-  ) {
-    throw new AppError("Latitude, longitude ou raio inválido.", 400);
-  }
-
-  if (
-    (latitude === undefined) !== (longitude === undefined) ||
-    (radius !== undefined && (latitude === undefined || longitude === undefined))
-  ) {
-    throw new AppError("Informe latitude e longitude juntas; o raio exige ambas.", 400);
-  }
-
-  if (
-    (latitude !== undefined && (latitude < -90 || latitude > 90)) ||
-    (longitude !== undefined && (longitude < -180 || longitude > 180))
-  ) {
-    throw new AppError("Coordenadas fora dos limites válidos.", 400);
-  }
-  const points = await prisma.collectionPoint.findMany({
-    where: {
-      status: CollectionPointStatus.APPROVED,
-      ...(city ? { city: { equals: city } } : {}),
-      ...(wasteType ? { wasteCategories: { array_contains: [wasteType] } } : {}),
-    },
-    omit: publicOmit,
-    orderBy: { name: "asc" },
-  });
-  const filteredPoints =
-    latitude !== undefined && longitude !== undefined && radius !== undefined
-      ? points.filter((point) => {
-          if (point.latitude == null || point.longitude == null) {
-            return false;
-          }
-
-          const distance = distanceInKm(
-            { latitude, longitude },
-            { latitude: Number(point.latitude), longitude: Number(point.longitude) },
-          );
-
-          return distance <= radius;
-        })
-      : points;
-  res.status(200).json(
-    filteredPoints.map((point) => ({
-      ...point,
-      whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
-    })),
-  );
-});
+    res.setHeader("X-Total-Count", String(total));
+    res.status(200).json(
+      items.map(({ point, distanceKm }) => ({
+        ...toPublicCollectionPoint(point),
+        ...(distanceKm === null ? {} : { distanceKm: Math.round(distanceKm * 100) / 100 }),
+      })),
+    );
+  },
+);
 
 /**
  * @openapi
@@ -270,10 +246,7 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
     omit: publicOmit,
   });
   if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
-  res.status(200).json({
-    ...point,
-    whatsappContact: point.showWhatsappContact ? point.whatsappContact : null,
-  });
+  res.status(200).json(toPublicCollectionPoint(point));
 });
 
 /**

@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+export const wasteTypes = [
+  "PLASTIC",
+  "PAPER",
+  "METALS",
+  "GLASS",
+  "COOKING_OIL",
+  "ELECTRONICS",
+  "BATTERIES",
+  "CELL_PHONES",
+  "COMPUTERS",
+  "PRINTERS",
+  "TELEVISIONS",
+] as const;
+
 const weekdays = [
   "MONDAY",
   "TUESDAY",
@@ -24,23 +38,7 @@ export const collectionPointSchema = z
       .optional(),
     whatsappContact: z.string().trim().min(8).optional(),
     showWhatsappContact: z.boolean().default(false),
-    wasteCategories: z
-      .array(
-        z.enum([
-          "PLASTIC",
-          "PAPER",
-          "METALS",
-          "GLASS",
-          "COOKING_OIL",
-          "ELECTRONICS",
-          "BATTERIES",
-          "CELL_PHONES",
-          "COMPUTERS",
-          "PRINTERS",
-          "TELEVISIONS",
-        ]),
-      )
-      .min(1),
+    wasteCategories: z.array(z.enum(wasteTypes)).min(1),
     operatingHours: z
       .array(
         z.object({
@@ -84,3 +82,100 @@ export const reviewSchema = z
       });
     }
   });
+
+const SEARCH_DEFAULT_LIMIT = 100;
+const SEARCH_MAX_LIMIT = 500;
+const SEARCH_MAX_RADIUS_KM = 100;
+
+const blankToUndefined = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? undefined : value;
+
+function optionalQuery<T extends z.ZodType>(schema: T) {
+  return z.preprocess(blankToUndefined, schema.optional());
+}
+
+function decimalQuery(name: string) {
+  return z
+    .string()
+    .trim()
+    .regex(/^-?\d{1,3}(\.\d{1,15})?$/, `${name} inválida`)
+    .transform(Number);
+}
+
+const wasteTypeListSchema = z
+  .string()
+  .transform((value) => [...new Set(value.split(",").map((item) => item.trim()))])
+  .pipe(
+    z
+      .array(
+        z.enum(wasteTypes, {
+          error: `Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`,
+        }),
+      )
+      .min(1),
+  );
+
+export const searchCollectionPointsQuerySchema = z
+  .object({
+    city: optionalQuery(z.string().trim().min(1).max(100, "Cidade muito longa")),
+    wasteType: optionalQuery(wasteTypeListSchema),
+    latitude: optionalQuery(
+      decimalQuery("latitude").pipe(
+        z.number().min(-90, "latitude fora do intervalo").max(90, "latitude fora do intervalo"),
+      ),
+    ),
+    longitude: optionalQuery(
+      decimalQuery("longitude").pipe(
+        z.number().min(-180, "longitude fora do intervalo").max(180, "longitude fora do intervalo"),
+      ),
+    ),
+    radius: optionalQuery(
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,3}(\.\d{1,3})?$/, "raio inválido")
+        .transform(Number)
+        .pipe(
+          z
+            .number()
+            .positive("raio deve ser maior que zero")
+            .max(SEARCH_MAX_RADIUS_KM, `raio máximo de ${SEARCH_MAX_RADIUS_KM} km`),
+        ),
+    ),
+    limit: optionalQuery(
+      z
+        .string()
+        .trim()
+        .regex(/^\d{1,4}$/, "limit inválido")
+        .transform(Number)
+        .pipe(
+          z
+            .number()
+            .int()
+            .min(1, "limit deve ser maior que zero")
+            .max(SEARCH_MAX_LIMIT, `limit máximo de ${SEARCH_MAX_LIMIT}`),
+        ),
+    ).transform((value) => value ?? SEARCH_DEFAULT_LIMIT),
+  })
+  .superRefine((value, context) => {
+    const hasLatitude = value.latitude !== undefined;
+    const hasLongitude = value.longitude !== undefined;
+
+    if (hasLatitude !== hasLongitude) {
+      context.addIssue({
+        code: "custom",
+        path: ["latitude"],
+        message: "Informe latitude e longitude juntas",
+      });
+    }
+
+    if (value.radius !== undefined && !(hasLatitude && hasLongitude)) {
+      context.addIssue({
+        code: "custom",
+        path: ["radius"],
+        message: "O raio exige latitude e longitude",
+      });
+    }
+  });
+
+export type SearchCollectionPointsQuery = z.output<typeof searchCollectionPointsQuerySchema>;
