@@ -12,6 +12,7 @@ import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
 import { SearchCollectionPointsUseCase } from "../domain/use-cases/SearchCollectionPointsUseCase";
 import { PrismaCollectionPointSearchRepository } from "../infra/repositories/PrismaCollectionPointSearchRepository";
 import { toPublicCollectionPoint } from "./collection-points.presenter";
+import { PrismaWasteCategoryRepository } from "../../waste-categories/infra/repositories/PrismaWasteCategoryRepository";
 import {
   collectionPointSchema,
   reviewSchema,
@@ -26,6 +27,10 @@ const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
 
+const pointWithCategories = {
+  categories: { include: { category: { select: { name: true } } } },
+} as const;
+
 // Moderation details are internal — never expose them on the public map.
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 
@@ -34,13 +39,40 @@ const searchCollectionPoints = new SearchCollectionPointsUseCase(
 );
 
 const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
+const wasteCategoryRepository = new PrismaWasteCategoryRepository();
+
+type PointWithCategories = {
+  categories: { category: { name: string } }[];
+};
+
+function serializePoint<T extends PointWithCategories>(point: T) {
+  const { categories, ...pointData } = point;
+  return {
+    ...pointData,
+    wasteCategories: categories.map(({ category }) => category.name).sort(),
+  };
+}
+
+async function findActiveWasteCategories(codes: string[]) {
+  const categories = await wasteCategoryRepository.findActiveByNames(codes);
+  const activeCodes = new Set(categories.map(({ name }) => name));
+  const invalidCodes = codes.filter((code) => !activeCodes.has(code));
+
+  if (invalidCodes.length > 0) {
+    throw new AppError(
+      `Categorias de resíduos inexistentes ou inativas: ${invalidCodes.join(", ")}`,
+      400,
+    );
+  }
+
+  return categories;
+}
 
 async function withResolvedLocation(body: CollectionPointInput) {
-  const { latitude, longitude, placeId, ...point } = body;
+  const { latitude, longitude, placeId } = body;
   const location = await resolveLocation.execute({ latitude, longitude, placeId });
 
   return {
-    ...point,
     latitude: location.latitude,
     longitude: location.longitude,
     locationSource: location.source,
@@ -70,7 +102,7 @@ async function withResolvedLocation(body: CollectionPointInput) {
  *         schema:
  *           type: string
  *           example: PLASTIC,GLASS
- *         description: One or more comma-separated waste types (PLASTIC, PAPER, METALS, GLASS, COOKING_OIL, ELECTRONICS, BATTERIES, CELL_PHONES, COMPUTERS, PRINTERS, TELEVISIONS)
+ *         description: One or more comma-separated active waste category codes from GET /waste-categories (e.g. PLASTIC, GLASS). Unknown or inactive codes return 400.
  *       - in: query
  *         name: latitude
  *         schema:
@@ -118,14 +150,17 @@ collectionPointsRoutes.get(
     const { city, wasteType, latitude, longitude, radius, limit } =
       req.query as unknown as SearchCollectionPointsQuery;
 
-    const { items, total } = await searchCollectionPoints.execute({
-      city,
-      wasteTypes: wasteType,
-      origin:
-        latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
-      radiusKm: radius,
-      limit,
-    });
+    const [, { items, total }] = await Promise.all([
+      wasteType ? findActiveWasteCategories(wasteType) : undefined,
+      searchCollectionPoints.execute({
+        city,
+        wasteTypes: wasteType,
+        origin:
+          latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
+        radiusKm: radius,
+        limit,
+      }),
+    ]);
 
     res.setHeader("X-Total-Count", String(total));
     res.status(200).json(
@@ -156,8 +191,9 @@ collectionPointsRoutes.get(
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId: req.user!.id },
       orderBy: { updatedAt: "desc" },
+      include: pointWithCategories,
     });
-    res.status(200).json(points);
+    res.status(200).json(points.map(serializePoint));
   },
 );
 
@@ -179,10 +215,10 @@ collectionPointsRoutes.get(
   async (_req, res) => {
     const points = await prisma.collectionPoint.findMany({
       where: { status: CollectionPointStatus.PENDING },
-      include: pointWithCollector,
+      include: { ...pointWithCollector, ...pointWithCategories },
       orderBy: { createdAt: "asc" },
     });
-    res.status(200).json(points);
+    res.status(200).json(points.map(serializePoint));
   },
 );
 
@@ -215,10 +251,20 @@ collectionPointsRoutes.post(
   authorize(Role.COLLECTOR),
   validate(collectionPointSchema),
   async (req, res) => {
+    const { wasteCategories, ...pointData } = req.body as CollectionPointInput;
+    const categories = await findActiveWasteCategories(wasteCategories);
     const point = await prisma.collectionPoint.create({
-      data: { ...(await withResolvedLocation(req.body)), collectorId: req.user!.id },
+      data: {
+        ...pointData,
+        ...(await withResolvedLocation(req.body)),
+        collectorId: req.user!.id,
+        categories: {
+          create: categories.map(({ id }) => ({ category: { connect: { id } } })),
+        },
+      },
+      include: pointWithCategories,
     });
-    res.status(201).json(point);
+    res.status(201).json(serializePoint(point));
   },
 );
 
@@ -244,9 +290,10 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
   const point = await prisma.collectionPoint.findFirst({
     where: { id: pointId, status: CollectionPointStatus.APPROVED },
     omit: publicOmit,
+    include: pointWithCategories,
   });
   if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
-  res.status(200).json(toPublicCollectionPoint(point));
+  res.status(200).json(toPublicCollectionPoint(serializePoint(point)));
 });
 
 /**
@@ -290,10 +337,17 @@ collectionPointsRoutes.put(
       "Você só pode atualizar seus próprios pontos de coleta",
     );
 
+    const { wasteCategories, ...pointData } = req.body as CollectionPointInput;
+    const categories = await findActiveWasteCategories(wasteCategories);
     const point = await prisma.collectionPoint.update({
       where: { id: existing.id },
       data: {
+        ...pointData,
         ...(await withResolvedLocation(req.body)),
+        categories: {
+          deleteMany: {},
+          create: categories.map(({ id }) => ({ category: { connect: { id } } })),
+        },
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,
         reviewedById: null,
@@ -301,8 +355,9 @@ collectionPointsRoutes.put(
         hoursConfirmedAt: new Date(),
         isOutdated: false,
       },
+      include: pointWithCategories,
     });
-    res.status(200).json(point);
+    res.status(200).json(serializePoint(point));
   },
 );
 
@@ -354,7 +409,8 @@ collectionPointsRoutes.patch(
         reviewedById: req.user!.id,
         reviewedAt: new Date(),
       },
+      include: pointWithCategories,
     });
-    res.status(200).json(point);
+    res.status(200).json(serializePoint(point));
   },
 );

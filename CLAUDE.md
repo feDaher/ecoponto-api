@@ -58,7 +58,7 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 
 ### Collection point search (BE-07)
 
-`GET /collection-points` is public and combines optional filters: `city` (exact, case/accent-insensitive through the column collation), `wasteType` (one or more comma-separated enum values, matched with OR; the JSON `wasteCategories` column is read via `JSON_CONTAINS`), and `latitude` + `longitude` (+ `radius` in km, max 100). Everything is validated by `searchCollectionPointsQuerySchema` (blank params are ignored, repeated or malformed ones are 400, latitude/longitude must come together and `radius` needs both). `limit` defaults to 100 (max 500); `X-Total-Count` (exposed through CORS) carries the number of matches before `limit`. With a reference point, items carry `distanceKm` and are ordered by distance; otherwise by name. Only `APPROVED` points are ever read.
+`GET /collection-points` is public and combines optional filters: `city` (exact, case/accent-insensitive through the column collation), `wasteType` (one or more comma-separated category codes, matched with OR through an `EXISTS` on `PointCategory` joined to active `WasteCategory` rows; codes that are unknown or inactive in the catalog are rejected with 400 before the search runs), and `latitude` + `longitude` (+ `radius` in km, max 100). Everything is validated by `searchCollectionPointsQuerySchema` (blank params are ignored, repeated or malformed ones are 400, latitude/longitude must come together and `radius` needs both). `limit` defaults to 100 (max 500); `X-Total-Count` (exposed through CORS) carries the number of matches before `limit`. With a reference point, items carry `distanceKm` and are ordered by distance; otherwise by name. Only `APPROVED` points are ever read.
 
 Performance rules worth keeping (measured with `load-test`, 5000 points, 100 connections, p99 < 2 s in every scenario):
 
@@ -68,9 +68,9 @@ Performance rules worth keeping (measured with `load-test`, 5000 points, 100 con
 - Cost is proportional to the response size: throughput was ~110 req/s at `limit=200`, ~190 at 100 and ~290 at 50, hence the default of 100. Use `prisma` (primary), not `prismaRead`: this is not a report query.
 - The Haversine expression in SQL and `distanceInKm` (`src/shared/geo/distance.ts`) must stay equivalent; `boundingBox` must always be a superset of the circle.
 
-### Collection point data that exists in two places
+### Collection point categories and hours
 
-`CollectionPoint` still carries `wasteCategories` and `operatingHours` as JSON (written by `POST/PUT /collection-points` and used by the public search filter `wasteType` via `array_contains`), while the normalized `PointCategory` and `OperatingHours` tables are written by the `operating-hours/` module. Until they are unified, keep both in mind: the search reads the JSON, the per-point hours endpoint reads the table.
+Collection point categories are normalized through `PointCategory`, linked to active `WasteCategory` records by their `name` code. The `POST`/`PUT /collection-points` API accepts and returns `wasteCategories` as a list of codes for frontend compatibility; handlers translate that API field to relation writes, and public search filters through the relation. The BE-16 migration backfills existing JSON values before dropping the old column. `operatingHours` remains JSON on `CollectionPoint`, while the `OperatingHours` table is used by the per-point hours module.
 
 ### Collection point location (BE-04, RN04)
 
@@ -107,7 +107,7 @@ Firebase is the identity provider; there is no separately-issued JWT — **the F
 This is a class project: the professor (orientador) owns a single **dev** Firebase project, and every student gets its credentials (`FIREBASE_*` in `.env`) through a private channel — students do not create their own Firebase project. Each student runs their **own** local MySQL (Docker). Consequences:
 
 - Firebase Auth users are shared across the whole class; `User` rows are per-machine. A user registered on one student's machine exists in Firebase but not in another student's DB: re-registering that email → 409, logging in works but protected routes → 401. This is expected, not a bug.
-- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes the collection-point `wasteCategories` JSON uses). Idempotent; refuses to run with `NODE_ENV=production`.
+- `npm run db:seed` (`src/database/seed.ts`) seeds `admin@ecoponto.dev` (ADMIN), `coletor@ecoponto.dev` (COLLECTOR), `cidadao@ecoponto.dev` (CITIZEN), all with password `Ecoponto@123`. It is **find-or-create** in Firebase: it only sets the password when creating the account, and never updates existing Firebase accounts — so one student running it can't change the shared accounts for everyone. It then upserts the local `User` row by email (refreshing `firebaseUid`), and upserts the 11 standard waste categories (`PLASTIC`, `PAPER`, … — same codes accepted by the collection-point API). Idempotent; refuses to run with `NODE_ENV=production`.
 - The seed is the only way to get an `ADMIN` in a fresh environment (no admin self-registration).
 - Never commit credentials, and a production deployment must use a separate Firebase project.
 

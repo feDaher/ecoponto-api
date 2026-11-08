@@ -38,7 +38,12 @@ export const collectionPointSchema = z
       .optional(),
     whatsappContact: z.string().trim().min(8).optional(),
     showWhatsappContact: z.boolean().default(false),
-    wasteCategories: z.array(z.enum(wasteTypes)).min(1),
+    wasteCategories: z
+      .array(z.string().trim().min(1).max(191))
+      .min(1)
+      .refine((categories) => new Set(categories).size === categories.length, {
+        message: "As categorias de resíduos não podem se repetir.",
+      }),
     operatingHours: z
       .array(
         z.object({
@@ -108,11 +113,13 @@ const wasteTypeListSchema = z
   .pipe(
     z
       .array(
-        z.enum(wasteTypes, {
-          error: `Tipo de resíduo inválido. Valores aceitos: ${wasteTypes.join(", ")}`,
-        }),
+        z
+          .string()
+          .regex(/^[A-Za-z0-9_]{1,191}$/, "Tipo de resíduo inválido")
+          .min(1),
       )
-      .min(1),
+      .min(1)
+      .max(20, "Informe no máximo 20 tipos de resíduo"),
   );
 
 export const searchCollectionPointsQuerySchema = z

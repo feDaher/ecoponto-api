@@ -34,19 +34,9 @@ export const swaggerSpec = swaggerJsdoc({
               minItems: 1,
               items: {
                 type: "string",
-                enum: [
-                  "PLASTIC",
-                  "PAPER",
-                  "METALS",
-                  "GLASS",
-                  "COOKING_OIL",
-                  "ELECTRONICS",
-                  "BATTERIES",
-                  "CELL_PHONES",
-                  "COMPUTERS",
-                  "PRINTERS",
-                  "TELEVISIONS",
-                ],
+                example: "PLASTIC",
+                description:
+                  "Código (name) de uma categoria ativa retornada por GET /waste-categories.",
               },
             },
             operatingHours: {

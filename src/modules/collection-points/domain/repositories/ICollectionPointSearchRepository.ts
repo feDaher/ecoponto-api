@@ -4,7 +4,7 @@ import type { GeoPoint } from "../../../../shared/geo/distance";
 export type PublicCollectionPoint = Omit<
   CollectionPoint,
   "rejectionReason" | "reviewedById" | "reviewedAt"
->;
+> & { wasteCategories: string[] };
 
 export interface CollectionPointSearchCriteria {
   city?: string;

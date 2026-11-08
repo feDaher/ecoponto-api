@@ -16,6 +16,11 @@ interface RankedRow {
   distanceKm: number | string | null;
 }
 
+interface CategoryLinkRow {
+  pointId: string;
+  name: string;
+}
+
 interface CountRow {
   total: bigint | number | string;
 }
@@ -36,10 +41,13 @@ function buildConditions({ city, wasteTypes, origin, radiusKm }: CollectionPoint
   }
 
   if (wasteTypes?.length) {
-    const anyOf = wasteTypes.map(
-      (wasteType) => Prisma.sql`JSON_CONTAINS(wasteCategories, ${JSON.stringify(wasteType)})`,
-    );
-    conditions.push(Prisma.sql`(${Prisma.join(anyOf, " OR ")})`);
+    // MATERIALIZATION builds the set of matching point ids once; without the hint MySQL picks a
+    // weedout plan that rescans every approved point once per requested category.
+    conditions.push(Prisma.sql`id IN (
+      SELECT /*+ SEMIJOIN(MATERIALIZATION) */ pc.pointId FROM PointCategory pc
+      JOIN WasteCategory wc ON wc.id = pc.categoryId
+      WHERE wc.active = TRUE AND wc.name IN (${Prisma.join(wasteTypes)})
+    )`);
   }
 
   if (origin && radiusKm !== undefined) {
@@ -68,17 +76,30 @@ export class PrismaCollectionPointSearchRepository implements ICollectionPointSe
       Prisma.sql`SELECT id, ${distance} AS distanceKm FROM CollectionPoint WHERE ${where} ORDER BY ${orderBy} LIMIT ${limit}`,
     );
 
-    const total = ranked.length < limit ? ranked.length : await this.countMatching(where);
-
     if (ranked.length === 0) {
-      return { items: [], total };
+      return { items: [], total: 0 };
     }
 
-    const rows = await prisma.collectionPoint.findMany({
-      where: { id: { in: ranked.map((row) => row.id) } },
-      omit: publicOmit,
-    });
-    const pointsById = new Map(rows.map((point) => [point.id, point]));
+    const ids = ranked.map((row) => row.id);
+    const [total, rows, links] = await Promise.all([
+      ranked.length < limit ? ranked.length : this.countMatching(where),
+      prisma.collectionPoint.findMany({ where: { id: { in: ids } }, omit: publicOmit }),
+      prisma.$queryRaw<CategoryLinkRow[]>(
+        Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.pointId IN (${Prisma.join(ids)})`,
+      ),
+    ]);
+
+    const categoriesByPoint = new Map<string, string[]>();
+    for (const { pointId, name } of links) {
+      categoriesByPoint.set(pointId, [...(categoriesByPoint.get(pointId) ?? []), name]);
+    }
+
+    const pointsById = new Map(
+      rows.map((point) => [
+        point.id,
+        { ...point, wasteCategories: (categoriesByPoint.get(point.id) ?? []).sort() },
+      ]),
+    );
 
     const items = ranked.flatMap((row): SearchedCollectionPoint[] => {
       const point = pointsById.get(row.id);

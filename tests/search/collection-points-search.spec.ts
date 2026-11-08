@@ -9,6 +9,7 @@ import { prisma, resetPrismaMock } from "../support/prisma-mock";
 
 const MANHUACU = { latitude: -20.258, longitude: -42.0336 };
 const MANHUACU_QUERY = { latitude: "-20.258", longitude: "-42.0336" };
+const ACTIVE_CATEGORIES = ["PLASTIC", "PAPER", "GLASS", "BATTERIES", "TELEVISIONS"];
 
 let sequence = 0;
 
@@ -27,7 +28,7 @@ function point(overrides: Record<string, unknown> = {}) {
     placeId: null,
     whatsappContact: "33999990000",
     showWhatsappContact: false,
-    wasteCategories: ["PLASTIC"],
+    categories: [{ category: { name: "PLASTIC" } }],
     operatingHours: [],
     status: CollectionPointStatus.APPROVED,
     hoursConfirmedAt: new Date("2026-10-01T00:00:00Z"),
@@ -51,21 +52,31 @@ function stubSearch({
   total = ranked.length as number | bigint,
   hydrated = [] as ReturnType<typeof point>[],
 } = {}) {
-  queryRaw().mockImplementation(async (sql: Prisma.Sql) =>
-    sql.sql.includes("COUNT(*)") ? [{ total }] : ranked,
-  );
+  queryRaw().mockImplementation(async (sql: Prisma.Sql) => {
+    if (sql.sql.includes("COUNT(*)")) return [{ total }];
+    if (sql.sql.includes("WHERE pc.pointId IN")) {
+      return hydrated.flatMap(({ id, categories }) =>
+        categories.map(({ category }) => ({ pointId: id, name: category.name })),
+      );
+    }
+    return ranked;
+  });
   prisma.collectionPoint.findMany.mockResolvedValue(hydrated);
 }
 
 beforeEach(() => {
   resetPrismaMock();
   sequence = 0;
+  prisma.wasteCategory.findMany.mockImplementation(
+    async ({ where }: { where: { name: { in: string[] } } }) =>
+      where.name.in
+        .filter((name) => ACTIVE_CATEGORIES.includes(name))
+        .map((name) => ({ id: `cat-${name}`, name, active: true })),
+  );
 });
 
 describe("GET /collection-points query validation", () => {
   it.each([
-    ["unknown waste type", { wasteType: "UNOBTAINIUM" }],
-    ["one unknown waste type among valid ones", { wasteType: "PLASTIC,UNOBTAINIUM" }],
     ["latitude without longitude", { latitude: "-20.25" }],
     ["longitude without latitude", { longitude: "-42.03" }],
     ["radius without coordinates", { radius: "5" }],
@@ -88,11 +99,29 @@ describe("GET /collection-points query validation", () => {
     expect(queryRaw()).not.toHaveBeenCalled();
   });
 
-  it("lists the accepted waste types when one is unknown", async () => {
-    const response = await search({ wasteType: "UNOBTAINIUM" });
+  it.each([
+    ["unknown waste type", "UNOBTAINIUM"],
+    ["one unknown waste type among valid ones", "PLASTIC,UNOBTAINIUM"],
+  ])("returns 400 for %s, checked against the catalog", async (_label, wasteType) => {
+    const response = await search({ wasteType });
 
-    expect(response.body.message).toContain("PLASTIC");
-    expect(response.body.message).toContain("TELEVISIONS");
+    expect(response.status).toBe(400);
+    expect(prisma.wasteCategory.findMany).toHaveBeenCalled();
+  });
+
+  it("names the unknown or inactive waste types from the catalog", async () => {
+    const response = await search({ wasteType: "PLASTIC,UNOBTAINIUM" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("UNOBTAINIUM");
+    expect(response.body.message).not.toContain("PLASTIC");
+  });
+
+  it("rejects malformed waste type codes before querying the catalog", async () => {
+    const response = await search({ wasteType: "PLASTIC;DROP" });
+
+    expect(response.status).toBe(400);
+    expect(prisma.wasteCategory.findMany).not.toHaveBeenCalled();
   });
 
   it("treats blank filters as absent", async () => {
@@ -124,12 +153,16 @@ describe("GET /collection-points filter composition", () => {
     const { sql, values } = rankedQuery();
     expect(sql).toContain("status = ?");
     expect(sql).toContain("city = ?");
-    expect(sql).toContain("JSON_CONTAINS(wasteCategories, ?)");
+    expect(sql).toContain("id IN (");
+    expect(sql).toContain("SEMIJOIN(MATERIALIZATION)");
+    expect(sql).toContain("FROM PointCategory pc");
+    expect(sql).toContain("wc.active = TRUE");
+    expect(sql).toContain("wc.name IN (?)");
     expect(sql).toContain("latitude BETWEEN ? AND ?");
     expect(sql).toContain("longitude BETWEEN ? AND ?");
     expect(sql).toContain("<= ?");
     expect(values).toEqual(
-      expect.arrayContaining([CollectionPointStatus.APPROVED, "Manhuaçu", '"GLASS"', 5]),
+      expect.arrayContaining([CollectionPointStatus.APPROVED, "Manhuaçu", "GLASS", 5]),
     );
   });
 
@@ -144,18 +177,17 @@ describe("GET /collection-points filter composition", () => {
 
     const conditions = (sql: Prisma.Sql) => sql.sql.slice(sql.sql.indexOf("WHERE"));
     expect(conditions(countQuery())).toBe(conditions(rankedQuery()).replace(/ ORDER BY.*/, ""));
-    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", '"GLASS"']);
+    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", "GLASS"]);
   });
 
   it("matches any of several waste types and ignores duplicates", async () => {
     await search({ wasteType: "PLASTIC, GLASS,PLASTIC" });
 
     const { sql, values } = rankedQuery();
-    expect(sql.match(/JSON_CONTAINS/g)).toHaveLength(2);
-    expect(sql).toContain(
-      "(JSON_CONTAINS(wasteCategories, ?) OR JSON_CONTAINS(wasteCategories, ?))",
-    );
-    expect(values).toEqual(expect.arrayContaining(['"PLASTIC"', '"GLASS"']));
+    expect(sql.match(/FROM PointCategory pc/g)).toHaveLength(1);
+    expect(sql).toMatch(/wc\.name IN \(\?,\s?\?\)/);
+    expect(values.filter((value: unknown) => value === "PLASTIC")).toHaveLength(1);
+    expect(values).toEqual(expect.arrayContaining(["PLASTIC", "GLASS"]));
   });
 
   it("bounds the query around the reference point by the radius", async () => {

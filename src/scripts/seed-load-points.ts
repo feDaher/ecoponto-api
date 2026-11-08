@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma } from "../config/prisma";
 import { CollectionPointStatus, Role } from "../generated/prisma/enums";
 import { wasteTypes } from "../modules/collection-points/presentation/collection-points.validators";
@@ -55,9 +56,9 @@ function pickStatus(random: () => number) {
 }
 
 async function clean() {
-  const { count } = await prisma.collectionPoint.deleteMany({
-    where: { name: { startsWith: LOAD_PREFIX } },
-  });
+  const where = { name: { startsWith: LOAD_PREFIX } };
+  await prisma.pointCategory.deleteMany({ where: { point: where } });
+  const { count } = await prisma.collectionPoint.deleteMany({ where });
   console.log(`Removed ${count} load-test collection points`);
 }
 
@@ -68,6 +69,16 @@ async function populate(total: number) {
     throw new Error("No COLLECTOR user found. Run `npm run db:seed` first.");
   }
 
+  const categories = await prisma.wasteCategory.findMany({
+    where: { name: { in: [...wasteTypes] }, active: true },
+    select: { id: true, name: true },
+  });
+  const categoryIds = new Map(categories.map(({ id, name }) => [name, id]));
+
+  if (categoryIds.size !== wasteTypes.length) {
+    throw new Error("Missing waste categories. Run `npm run db:seed` first.");
+  }
+
   await clean();
 
   const random = createRandom(20261104);
@@ -75,24 +86,33 @@ async function populate(total: number) {
   for (let created = 0; created < total; created += BATCH_SIZE) {
     const size = Math.min(BATCH_SIZE, total - created);
 
+    const links: { pointId: string; categoryId: string }[] = [];
+
     await prisma.collectionPoint.createMany({
       data: Array.from({ length: size }, (_, index) => {
         const city = pickCity(random);
         const number = created + index + 1;
+        const id = randomUUID();
+
+        for (const wasteType of pickWasteTypes(random)) {
+          links.push({ pointId: id, categoryId: categoryIds.get(wasteType)! });
+        }
 
         return {
+          id,
           collectorId: collector.id,
           name: `${LOAD_PREFIX}Ponto ${number}`,
           city: city.name,
           address: `Rua ${number}, ${city.name}`,
           latitude: city.latitude + (random() - 0.5) * 0.16,
           longitude: city.longitude + (random() - 0.5) * 0.16,
-          wasteCategories: pickWasteTypes(random),
           operatingHours,
           status: pickStatus(random),
         };
       }),
     });
+
+    await prisma.pointCategory.createMany({ data: links });
 
     console.log(`Inserted ${created + size}/${total}`);
   }
