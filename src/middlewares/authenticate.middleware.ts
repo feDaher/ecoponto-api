@@ -16,11 +16,6 @@ function isFirebaseAuthError(error: unknown) {
 }
 
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
-  console.log("[AUTH DEBUG]", {
-    hasHeader: Boolean(req.headers.authorization),
-    validFormat: BEARER_TOKEN.test(req.headers.authorization ?? ""),
-  });
-
   const match = BEARER_TOKEN.exec(req.headers.authorization ?? "");
 
   if (!match) {
