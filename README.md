@@ -170,7 +170,7 @@ Se quiser acesso total (ver/criar outros bancos), use o usuário `root` / senha 
 npm run db:seed
 ```
 
-> Ambiente novo do zero? `npm run db:setup` faz tudo de uma vez: sobe o MySQL (`db:up`), aplica as migrations (`prisma migrate deploy`) e roda o seed. O seed também está registrado no `prisma7.config.ts`, então `npx prisma db seed` faz o mesmo que `npm run db:seed`.
+> Ambiente novo do zero? `npm run db:setup` faz tudo de uma vez: sobe o MySQL (`db:up`), aplica as migrations (`prisma migrate deploy`), gera o client do Prisma (`prisma generate`) e roda o seed. O seed também está registrado no `prisma7.config.ts`, então `npx prisma db seed` faz o mesmo que `npm run db:seed`.
 
 Cria no seu MySQL local as **11 categorias de resíduo padrão** (`PLASTIC`, `PAPER`, `METALS`, `GLASS`, `COOKING_OIL`, `ELECTRONICS`, `BATTERIES`, `CELL_PHONES`, `COMPUTERS`, `PRINTERS`, `TELEVISIONS`, os mesmos códigos usados no campo `wasteCategories` dos pontos de coleta) e três usuários, um para cada perfil:
 
@@ -260,7 +260,7 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 | `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                         |
 | `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                           |
 | `npm run db:seed`                      | Cria no banco local as categorias padrão e as contas de teste (admin, coletor, cidadão) |
-| `npm run db:setup`                     | Ambiente novo: sobe o MySQL, aplica as migrations e roda o seed                         |
+| `npm run db:setup`                     | Ambiente novo: sobe o MySQL, aplica as migrations, gera o client e roda o seed          |
 | `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                                     |
 
 ## Pool de conexões e teste de carga

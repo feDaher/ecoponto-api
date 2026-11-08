@@ -38,7 +38,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
 - `npm run lint` / `npm run lint:fix` — ESLint (flat config, `eslint.config.js`, TypeScript-only via `typescript-eslint`)
 - `npm run format` / `npm run format:check` — Prettier
 - `npm run db:seed` — seeds the 11 standard waste categories and the three dev accounts (see "Shared Firebase project & seed" below); also wired as `migrations.seed` in `prisma7.config.ts`, so `npx prisma db seed` runs it too
-- `npm run db:setup` — fresh environment in one step: `db:up` → `prisma migrate deploy` → `db:seed`
+- `npm run db:setup` — fresh environment in one step: `db:up` → `prisma migrate deploy` → `prisma generate` → `db:seed` (generate is needed on a fresh clone: `src/generated/` is gitignored and the seed imports the client)
 - `npm run load-test` — autocannon load test (`src/scripts/load-test.ts`) against an already-running API; exits non-zero on any non-2xx/error/timeout. Start the API with a high `RATE_LIMIT_MAX` first, or the global rate limiter turns the run into 429s
 - `npm test` — Jest + ts-jest + supertest (`jest.config.js`, specs in `tests/`, own `tests/tsconfig.json`). Tests never touch Firebase or MySQL: each spec `jest.mock`s `src/config/firebase` and `src/config/prisma` with `tests/support/*-mock.ts`, and `tests/support/identities.ts` provides one token per role. `npx tsc -p tests --noEmit` type-checks the specs. `npm run test:coverage` for coverage of the security code.
 

@@ -22,7 +22,7 @@
     "db:migrate:status": "prisma migrate status",
     "db:studio": "prisma studio",
     "db:seed": "ts-node --transpile-only src/database/seed.ts",
-    "db:setup": "npm run db:up && prisma migrate deploy && npm run db:seed",
+    "db:setup": "npm run db:up && prisma migrate deploy && prisma generate && npm run db:seed",
     "prepare": "husky",
     "test": "jest",
     "load-test": "ts-node --transpile-only src/scripts/load-test.ts",
