@@ -2,20 +2,6 @@ import swaggerJsdoc from "swagger-jsdoc";
 
 const weekdayEnum = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
 
-const wasteCategoryEnum = [
-  "PLASTIC",
-  "PAPER",
-  "METALS",
-  "GLASS",
-  "COOKING_OIL",
-  "ELECTRONICS",
-  "BATTERIES",
-  "CELL_PHONES",
-  "COMPUTERS",
-  "PRINTERS",
-  "TELEVISIONS",
-];
-
 const locationDescription =
   "Location (RN04): send valid GPS coordinates within Brazil (latitude + longitude), a verifiable address (placeId from GET /places/autocomplete), or both. With a placeId the server confirms the address with Google; when coordinates are also sent they must be within 1 km of it. A missing or invalid location returns 422.";
 
@@ -36,7 +22,11 @@ const collectionPointProperties = {
   wasteCategories: {
     type: "array",
     minItems: 1,
-    items: { type: "string", enum: wasteCategoryEnum },
+    items: {
+      type: "string",
+      example: "PLASTIC",
+      description: "Código (name) de uma categoria ativa retornada por GET /waste-categories.",
+    },
   },
 };
 

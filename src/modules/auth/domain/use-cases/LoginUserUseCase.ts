@@ -22,6 +22,10 @@ export class LoginUserUseCase {
       throw new AppError("User is not registered", 401);
     }
 
+    if (user.isBlocked) {
+      throw new AppError("User account is blocked", 403);
+    }
+
     return {
       idToken: result.idToken,
       refreshToken: result.refreshToken,

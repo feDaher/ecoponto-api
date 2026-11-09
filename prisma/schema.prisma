@@ -49,6 +49,7 @@ model User {
   phone       String
   city        String
   role        Role     @default(CITIZEN)
+  isBlocked   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -76,7 +77,6 @@ model CollectionPoint {
   placeId             String?               @db.VarChar(512)
   whatsappContact     String?
   showWhatsappContact Boolean               @default(false)
-  wasteCategories     Json
   status              CollectionPointStatus @default(PENDING)
   rejectionReason     String?               @db.Text
   reviewedById        String?
@@ -94,7 +94,9 @@ model CollectionPoint {
   disposalRecords DisposalRecord[]
   reviews         Review[]
 
-  @@index([status, city])
+  @@index([status, name])
+  @@index([status, city, name])
+  @@index([status, latitude, longitude])
   @@index([collectorId])
   @@index([reviewedById])
   @@index([isOutdated, hoursConfirmedAt])
