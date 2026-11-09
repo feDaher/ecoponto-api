@@ -73,6 +73,54 @@ export const swaggerSpec = swaggerJsdoc({
             },
           },
         },
+        EducationalContentInput: {
+          type: "object",
+          required: ["categoryId", "title", "summary", "content"],
+          properties: {
+            categoryId: { type: "string", description: "Id of an active waste category" },
+            title: { type: "string", maxLength: 191, example: "Guia de descarte de baterias" },
+            slug: {
+              type: "string",
+              maxLength: 191,
+              pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+              description: "Optional. Generated from the title when omitted. Must be unique (409).",
+              example: "guia-de-descarte-de-baterias",
+            },
+            summary: { type: "string", maxLength: 500, example: "Evite combustão espontânea." },
+            content: { type: "string", description: "Body in Markdown", example: "### Por quê?" },
+            format: {
+              type: "string",
+              enum: ["DISPOSAL_GUIDE", "DIY_TUTORIAL", "QUICK_FACT", "COMMUNITY_EVENT"],
+              default: "DISPOSAL_GUIDE",
+            },
+            level: {
+              type: "string",
+              enum: ["ESSENTIAL", "INTERMEDIATE", "ADVANCED"],
+              default: "ESSENTIAL",
+            },
+            readingTimeMinutes: { type: "integer", minimum: 1, maximum: 60, default: 3 },
+            xpReward: { type: "integer", minimum: 0, maximum: 100, default: 0 },
+            coverImageUrl: {
+              type: "string",
+              nullable: true,
+              maxLength: 1000,
+              pattern: "^https?://\\S+$",
+              default: null,
+            },
+            status: {
+              type: "string",
+              enum: ["DRAFT", "PENDING_REVIEW", "PUBLISHED"],
+              default: "DRAFT",
+              description: "Only PUBLISHED content is visible on public routes.",
+            },
+            featured: {
+              type: "boolean",
+              default: false,
+              description:
+                "Pins the content on the citizen home. Requires status PUBLISHED (422) and unpins the previous one.",
+            },
+          },
+        },
         CollectionPointReview: {
           type: "object",
           required: ["status"],

@@ -5,8 +5,8 @@ import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import {
   collectionPointSchema,
-  collectionPointSearchSchema,
   reviewSchema,
+  searchCollectionPointsQuerySchema,
 } from "./collection-points.validators";
 import {
   create,
@@ -24,38 +24,68 @@ export const collectionPointsRoutes = Router();
  * @openapi
  * /collection-points:
  *   get:
- *     summary: List approved collection points for the public map
+ *     summary: Search approved collection points for the public map
+ *     description: >
+ *       Filters are optional and combinable (AND between filters, OR between the waste types of
+ *       `wasteType`). With `latitude` and `longitude` the results are ordered by distance and carry
+ *       `distanceKm`; adding `radius` also discards points farther than that. Without a reference
+ *       point the results are ordered by name.
  *     tags: [Collection Points]
  *     parameters:
  *       - in: query
  *         name: city
- *         schema: { type: string }
- *         description: Filter by city
+ *         schema:
+ *           type: string
+ *         description: Filter by city (case and accent insensitive)
  *       - in: query
  *         name: wasteType
- *         schema: { type: string, example: PLASTIC }
- *         description: Filter by waste type
+ *         schema:
+ *           type: string
+ *           example: PLASTIC,GLASS
+ *         description: One or more comma-separated active waste category codes from GET /waste-categories (e.g. PLASTIC, GLASS). Unknown or inactive codes return 400.
  *       - in: query
  *         name: latitude
- *         schema: { type: number }
- *         description: Latitude of the search origin
+ *         schema:
+ *           type: number
+ *           minimum: -90
+ *           maximum: 90
+ *         description: Reference latitude for proximity search (requires longitude)
  *       - in: query
  *         name: longitude
- *         schema: { type: number }
- *         description: Longitude of the search origin
+ *         schema:
+ *           type: number
+ *           minimum: -180
+ *           maximum: 180
+ *         description: Reference longitude for proximity search (requires latitude)
  *       - in: query
  *         name: radius
- *         schema: { type: number, exclusiveMinimum: 0 }
- *         description: Maximum search radius in kilometers
+ *         schema:
+ *           type: number
+ *           exclusiveMinimum: 0
+ *           maximum: 100
+ *         description: Maximum distance in kilometers from the reference point (requires latitude and longitude)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 500
+ *           default: 100
+ *         description: Maximum number of points returned
  *     responses:
  *       200:
  *         description: Public collection points (approved only)
+ *         headers:
+ *           X-Total-Count:
+ *             description: Number of points matching the filters, before `limit` is applied
+ *             schema:
+ *               type: integer
  *       400:
- *         description: Invalid search filters
+ *         description: Invalid filter
  */
 collectionPointsRoutes.get(
   "/collection-points",
-  validate(collectionPointSearchSchema, "query"),
+  validate(searchCollectionPointsQuerySchema, "query"),
   listPublic,
 );
 
@@ -126,7 +156,7 @@ collectionPointsRoutes.get(
  *       403:
  *         description: User is not a collector
  *       422:
- *         description: Missing or invalid location
+ *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
  *       503:
  *         description: Address verification service unavailable
  */
@@ -187,7 +217,7 @@ collectionPointsRoutes.get("/collection-points/:id", findApprovedById);
  *       404:
  *         description: Point not found
  *       422:
- *         description: Missing or invalid location
+ *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
  *       503:
  *         description: Address verification service unavailable
  */

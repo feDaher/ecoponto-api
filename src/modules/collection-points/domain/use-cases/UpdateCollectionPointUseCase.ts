@@ -17,7 +17,7 @@ export class UpdateCollectionPointUseCase {
     private readonly location: ICollectionPointLocationResolver,
   ) {}
   async execute(input: UpdateCollectionPointInput): Promise<CollectionPoint> {
-    const existing = await this.points.findById(input.id);
+    const existing = await this.points.findSummaryById(input.id);
     if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
     assertOwner(
       input.requester,

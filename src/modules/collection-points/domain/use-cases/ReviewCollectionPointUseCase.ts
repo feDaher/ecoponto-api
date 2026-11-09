@@ -10,7 +10,7 @@ export interface ReviewCollectionPointInput {
 export class ReviewCollectionPointUseCase {
   constructor(private readonly points: ICollectionPointRepository) {}
   async execute(input: ReviewCollectionPointInput): Promise<CollectionPoint> {
-    const existing = await this.points.findById(input.id);
+    const existing = await this.points.findSummaryById(input.id);
     if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
     if (existing.status !== "PENDING")
       throw new AppError("Apenas pontos de coleta pendentes podem ser revisados", 400);

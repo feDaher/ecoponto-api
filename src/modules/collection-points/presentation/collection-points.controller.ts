@@ -4,17 +4,18 @@ import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
 import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
 import { PrismaWasteCategoryRepository } from "../../waste-categories/infra/repositories/PrismaWasteCategoryRepository";
 import { PrismaCollectionPointRepository } from "../infra/repositories/PrismaCollectionPointRepository";
+import { PrismaCollectionPointSearchRepository } from "../infra/repositories/PrismaCollectionPointSearchRepository";
 import { CreateCollectionPointUseCase } from "../domain/use-cases/CreateCollectionPointUseCase";
 import { FindApprovedCollectionPointByIdUseCase } from "../domain/use-cases/FindApprovedCollectionPointByIdUseCase";
 import { ListMyCollectionPointsUseCase } from "../domain/use-cases/ListMyCollectionPointsUseCase";
 import { ListPendingCollectionPointsUseCase } from "../domain/use-cases/ListPendingCollectionPointsUseCase";
-import { ListPublicCollectionPointsUseCase } from "../domain/use-cases/ListPublicCollectionPointsUseCase";
 import { ReviewCollectionPointUseCase } from "../domain/use-cases/ReviewCollectionPointUseCase";
+import { SearchCollectionPointsUseCase } from "../domain/use-cases/SearchCollectionPointsUseCase";
 import { UpdateCollectionPointUseCase } from "../domain/use-cases/UpdateCollectionPointUseCase";
-import type { CollectionPoint } from "../domain/entities/CollectionPoint";
+import { toPublicCollectionPoint } from "./collection-points.presenter";
 import type {
   CollectionPointInput,
-  CollectionPointSearchQuery,
+  SearchCollectionPointsQuery,
 } from "./collection-points.validators";
 
 const pointRepository = new PrismaCollectionPointRepository();
@@ -33,8 +34,8 @@ const updateUseCase = new UpdateCollectionPointUseCase(
   locationResolver,
 );
 const reviewUseCase = new ReviewCollectionPointUseCase(pointRepository);
-const listPublicUseCase = new ListPublicCollectionPointsUseCase(
-  pointRepository,
+const searchUseCase = new SearchCollectionPointsUseCase(
+  new PrismaCollectionPointSearchRepository(),
   categoryRepository,
 );
 const findApprovedUseCase = new FindApprovedCollectionPointByIdUseCase(pointRepository);
@@ -45,15 +46,24 @@ function pointIdFrom(request: Request) {
   const { id } = request.params;
   return Array.isArray(id) ? id[0] : id;
 }
-function publicResponse(point: CollectionPoint) {
-  return { ...point, whatsappContact: point.showWhatsappContact ? point.whatsappContact : null };
-}
 
 export async function listPublic(req: Request, res: Response) {
-  const points = await listPublicUseCase.execute(
-    req.query as unknown as CollectionPointSearchQuery,
+  const { city, wasteType, latitude, longitude, radius, limit } =
+    req.query as unknown as SearchCollectionPointsQuery;
+  const { items, total } = await searchUseCase.execute({
+    city,
+    wasteTypes: wasteType,
+    origin: latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
+    radiusKm: radius,
+    limit,
+  });
+  res.setHeader("X-Total-Count", String(total));
+  res.status(200).json(
+    items.map(({ point, distanceKm }) => ({
+      ...toPublicCollectionPoint(point),
+      ...(distanceKm === null ? {} : { distanceKm: Math.round(distanceKm * 100) / 100 }),
+    })),
   );
-  res.status(200).json(points.map(publicResponse));
 }
 export async function listMine(req: Request, res: Response) {
   res.status(200).json(await listMineUseCase.execute(req.user!.id));
@@ -69,7 +79,9 @@ export async function create(req: Request, res: Response) {
   res.status(201).json(point);
 }
 export async function findApprovedById(req: Request, res: Response) {
-  res.status(200).json(publicResponse(await findApprovedUseCase.execute(pointIdFrom(req))));
+  res
+    .status(200)
+    .json(toPublicCollectionPoint(await findApprovedUseCase.execute(pointIdFrom(req))));
 }
 export async function update(req: Request, res: Response) {
   const point = await updateUseCase.execute({

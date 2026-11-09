@@ -4,10 +4,6 @@ import type {
   CollectionPointLocationSource,
   CollectionPointStatus,
 } from "../entities/CollectionPoint";
-export interface CollectionPointSearchFilters {
-  city?: string;
-  wasteType?: string;
-}
 export interface CollectionPointWriteData extends Omit<
   CollectionPointDraft,
   "latitude" | "longitude" | "placeId" | "wasteCategories"
@@ -27,13 +23,14 @@ export interface ReviewCollectionPointData {
   reviewedById: string;
   reviewedAt: Date;
 }
+export type CollectionPointSummary = Pick<CollectionPoint, "id" | "collectorId" | "status">;
+
 export interface ICollectionPointRepository {
   create(data: CreateCollectionPointData): Promise<CollectionPoint>;
   update(id: string, data: CollectionPointWriteData): Promise<CollectionPoint>;
   review(id: string, data: ReviewCollectionPointData): Promise<CollectionPoint>;
-  findPublic(filters: CollectionPointSearchFilters): Promise<CollectionPoint[]>;
   findApprovedById(id: string): Promise<CollectionPoint | null>;
-  findById(id: string): Promise<CollectionPoint | null>;
+  findSummaryById(id: string): Promise<CollectionPointSummary | null>;
   listMine(collectorId: string): Promise<CollectionPoint[]>;
   listPending(): Promise<CollectionPoint[]>;
 }

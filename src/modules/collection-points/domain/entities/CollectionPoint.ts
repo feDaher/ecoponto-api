@@ -1,4 +1,4 @@
-export type CollectionPointStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type CollectionPointStatus = "PENDING" | "APPROVED" | "REJECTED" | "INACTIVE";
 export type CollectionPointLocationSource = "GPS_COORDINATES" | "VERIFIED_ADDRESS";
 export interface CollectionPointOperatingHours {
   weekday: string;

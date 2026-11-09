@@ -15,4 +15,6 @@ export interface IUserRepository {
   findByFirebaseUid(firebaseUid: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   findMany(): Promise<User[]>;
+  updateBlockedStatus(id: string, isBlocked: boolean): Promise<User>;
+  updateRole(id: string, role: Role): Promise<User>;
 }

@@ -1,9 +1,11 @@
 import { prisma } from "../../../../config/prisma";
-import { CollectionPointStatus, LocationSource } from "../../../../generated/prisma/enums";
+import { CollectionPointStatus } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
-import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
 import type {
-  CollectionPointSearchFilters,
+  CollectionPoint,
+  CollectionPointOperatingHours,
+} from "../../domain/entities/CollectionPoint";
+import type {
   CollectionPointWriteData,
   CreateCollectionPointData,
   ICollectionPointRepository,
@@ -17,23 +19,75 @@ const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
-type PointRow = Prisma.CollectionPointGetPayload<{ include: typeof pointWithCategories }>;
-type PendingPointRow = Prisma.CollectionPointGetPayload<{
-  include: typeof pointWithCategories & typeof pointWithCollector;
+type PublicPointRow = Prisma.CollectionPointGetPayload<{
+  include: typeof pointWithCategories;
+  omit: typeof publicOmit;
 }>;
 
-function toEntity<T extends PointRow>(row: T): CollectionPoint {
-  const { categories, ...pointData } = row;
-  return {
-    ...pointData,
-    latitude: String(pointData.latitude),
-    longitude: String(pointData.longitude),
-    wasteCategories: (categories ?? []).map(({ category }) => category.name).sort(),
-  } as unknown as CollectionPoint;
+type PointRow = PublicPointRow &
+  Partial<
+    Pick<
+      Prisma.CollectionPointGetPayload<object>,
+      "rejectionReason" | "reviewedById" | "reviewedAt"
+    >
+  > & {
+    collector?: { id: string; name: string; email: string };
+  };
+
+function isOperatingHour(value: Prisma.JsonValue): value is Prisma.JsonObject & {
+  weekday: string;
+  openTime: string;
+  closeTime: string;
+} {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof value.weekday === "string" &&
+    typeof value.openTime === "string" &&
+    typeof value.closeTime === "string"
+  );
 }
 
-function asJson(value: CollectionPointWriteData["operatingHours"]): Prisma.InputJsonValue {
-  return value as unknown as Prisma.InputJsonValue;
+function toOperatingHours(value: Prisma.JsonValue): CollectionPointOperatingHours[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isOperatingHour)
+    .map(({ weekday, openTime, closeTime }) => ({ weekday, openTime, closeTime }));
+}
+
+function toJsonHours(hours: CollectionPointOperatingHours[]): Prisma.InputJsonValue {
+  return hours.map(({ weekday, openTime, closeTime }) => ({ weekday, openTime, closeTime }));
+}
+
+function toEntity(row: PointRow): CollectionPoint {
+  return {
+    id: row.id,
+    collectorId: row.collectorId,
+    name: row.name,
+    description: row.description,
+    city: row.city,
+    address: row.address,
+    latitude: row.latitude.toString(),
+    longitude: row.longitude.toString(),
+    locationSource: row.locationSource,
+    placeId: row.placeId,
+    whatsappContact: row.whatsappContact,
+    showWhatsappContact: row.showWhatsappContact,
+    operatingHours: toOperatingHours(row.operatingHours),
+    status: row.status,
+    ...("rejectionReason" in row && {
+      rejectionReason: row.rejectionReason,
+      reviewedById: row.reviewedById,
+      reviewedAt: row.reviewedAt,
+    }),
+    hoursConfirmedAt: row.hoursConfirmedAt,
+    isOutdated: row.isOutdated,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    wasteCategories: row.categories.map(({ category }) => category.name).sort(),
+    ...(row.collector && { collector: row.collector }),
+  };
 }
 
 export class PrismaCollectionPointRepository implements ICollectionPointRepository {
@@ -47,14 +101,11 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         address: data.address,
         latitude: data.latitude,
         longitude: data.longitude,
-        locationSource:
-          data.locationSource === "GPS_COORDINATES"
-            ? LocationSource.GPS_COORDINATES
-            : LocationSource.VERIFIED_ADDRESS,
+        locationSource: data.locationSource,
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
-        operatingHours: asJson(data.operatingHours),
+        operatingHours: toJsonHours(data.operatingHours),
         categories: { create: data.categoryIds.map((id) => ({ category: { connect: { id } } })) },
       },
       include: pointWithCategories,
@@ -72,14 +123,11 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         address: data.address,
         latitude: data.latitude,
         longitude: data.longitude,
-        locationSource:
-          data.locationSource === "GPS_COORDINATES"
-            ? LocationSource.GPS_COORDINATES
-            : LocationSource.VERIFIED_ADDRESS,
+        locationSource: data.locationSource,
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
-        operatingHours: asJson(data.operatingHours),
+        operatingHours: toJsonHours(data.operatingHours),
         categories: {
           deleteMany: {},
           create: data.categoryIds.map((categoryId) => ({
@@ -102,10 +150,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const point = await prisma.collectionPoint.update({
       where: { id },
       data: {
-        status:
-          data.status === "APPROVED"
-            ? CollectionPointStatus.APPROVED
-            : CollectionPointStatus.REJECTED,
+        status: data.status,
         rejectionReason: data.rejectionReason,
         reviewedById: data.reviewedById,
         reviewedAt: data.reviewedAt,
@@ -115,39 +160,20 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     return toEntity(point);
   }
 
-  async findPublic(filters: CollectionPointSearchFilters) {
-    const points = await prisma.collectionPoint.findMany({
-      where: {
-        status: CollectionPointStatus.APPROVED,
-        ...(filters.city ? { city: { equals: filters.city } } : {}),
-        ...(filters.wasteType
-          ? {
-              categories: { some: { category: { is: { name: filters.wasteType, active: true } } } },
-            }
-          : {}),
-      },
-      include: pointWithCategories,
-      omit: publicOmit,
-      orderBy: { name: "asc" },
-    });
-    return points.map((point) => toEntity(point as unknown as PointRow));
-  }
-
   async findApprovedById(id: string) {
     const point = await prisma.collectionPoint.findFirst({
       where: { id, status: CollectionPointStatus.APPROVED },
       omit: publicOmit,
       include: pointWithCategories,
     });
-    return point ? toEntity(point as unknown as PointRow) : null;
+    return point ? toEntity(point) : null;
   }
 
-  async findById(id: string) {
-    const point = await prisma.collectionPoint.findUnique({
+  findSummaryById(id: string) {
+    return prisma.collectionPoint.findUnique({
       where: { id },
-      include: pointWithCategories,
+      select: { id: true, collectorId: true, status: true },
     });
-    return point ? toEntity(point) : null;
   }
 
   async listMine(collectorId: string) {
@@ -165,6 +191,6 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       include: { ...pointWithCategories, ...pointWithCollector },
       orderBy: { createdAt: "asc" },
     });
-    return points.map((point) => toEntity(point as PendingPointRow));
+    return points.map(toEntity);
   }
 }
