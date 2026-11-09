@@ -43,6 +43,11 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return;
   }
 
+  if (user.isBlocked) {
+    next(new AppError("User account is blocked", 403));
+    return;
+  }
+
   req.user = {
     id: user.id,
     firebaseUid: user.firebaseUid,

@@ -8,6 +8,7 @@ export interface User {
   phone: string;
   city: string;
   role: Role;
+  isBlocked: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

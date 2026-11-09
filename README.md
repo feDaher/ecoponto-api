@@ -164,13 +164,15 @@ Regras importantes:
 
 Se quiser acesso total (ver/criar outros bancos), use o usuário `root` / senha `root`.
 
-## 8. Popular o banco com as contas de teste (seed)
+## 8. Popular o banco com os dados iniciais (seed)
 
 ```bash
 npm run db:seed
 ```
 
-Cria no seu MySQL local três usuários, um para cada perfil:
+> Ambiente novo do zero? `npm run db:setup` faz tudo de uma vez: sobe o MySQL (`db:up`), aplica as migrations (`prisma migrate deploy`), gera o client do Prisma (`prisma generate`) e roda o seed. O seed também está registrado no `prisma7.config.ts`, então `npx prisma db seed` faz o mesmo que `npm run db:seed`.
+
+Cria no seu MySQL local as **11 categorias de resíduo padrão** (`PLASTIC`, `PAPER`, `METALS`, `GLASS`, `COOKING_OIL`, `ELECTRONICS`, `BATTERIES`, `CELL_PHONES`, `COMPUTERS`, `PRINTERS`, `TELEVISIONS`, os mesmos códigos usados no campo `wasteCategories` dos pontos de coleta) e três usuários, um para cada perfil:
 
 | Perfil    | E-mail                 | Senha          |
 | --------- | ---------------------- | -------------- |
@@ -181,7 +183,8 @@ Cria no seu MySQL local três usuários, um para cada perfil:
 Como funciona:
 
 - As contas **já existem no Firebase compartilhado** (foram criadas pelo orientador). O seed só busca o `uid` de cada uma no Firebase e cria/atualiza a linha correspondente na tabela `User` do seu banco. Ele **não altera** senha nem dados das contas no Firebase, então rodar o seed não afeta os colegas.
-- Pode rodar quantas vezes quiser. Depois de um `npm run db:reset`, rode `db:migrate` e `db:seed` de novo.
+- As categorias são criadas antes dos usuários e não dependem do Firebase: se as credenciais do Firebase estiverem erradas, o seed falha nos usuários, mas as categorias já ficam no banco.
+- Pode rodar quantas vezes quiser. Depois de um `npm run db:reset`, rode `db:migrate` e `db:seed` de novo (ou só `npm run db:setup`).
 - Essas são as únicas contas que funcionam igual em todos os ambientes. Use-as para testar os três perfis (é a única forma de ter um `ADMIN`, pois não existe cadastro de admin pela API).
 
 ## 9. Rodar a API
@@ -234,30 +237,46 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 
 ## Outros comandos úteis
 
-| Comando                                | O que faz                                                                        |
-| -------------------------------------- | -------------------------------------------------------------------------------- |
-| `npm run dev`                          | Sobe a API com hot-reload (reinicia sozinha a cada alteração de código)          |
-| `npm run build`                        | Compila o TypeScript para `dist/` (verifica erros de tipo)                       |
-| `npm start`                            | Roda a versão compilada (`dist/server.js`) — usar em produção, depois do `build` |
-| `npx prisma generate`                  | Regenera o cliente Prisma após mexer no `schema.prisma`                          |
-| `npx prisma migrate dev --name <nome>` | Cria uma nova migration a partir de mudanças no `schema.prisma`                  |
-| `npx prisma studio`                    | Abre uma interface visual no navegador para ver/editar os dados do banco         |
-| `npm run lint`                         | Verifica o código com ESLint                                                     |
-| `npm run lint:fix`                     | Verifica e corrige automaticamente o que der pra corrigir                        |
-| `npm run format`                       | Formata todo o código com Prettier                                               |
-| `npm run format:check`                 | Só verifica a formatação, sem alterar nada                                       |
-| `npm run db:up`                        | Sobe o MySQL via Docker Compose e espera ele ficar saudável                      |
-| `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                         |
-| `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                            |
-| `npm run db:replica:status`            | Mostra o estado da replicação (`SHOW REPLICA STATUS`) da réplica de leitura      |
-| `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                  |
-| `npm run db:migrate -- --name <nome>`  | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)            |
-| `npm run db:migrate:status`            | Mostra quais migrations já foram aplicadas no banco                              |
-| `npm run db:migrate:deploy`            | Aplica migrations pendentes em produção (sem criar novas)                        |
-| `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                  |
-| `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                    |
-| `npm run db:seed`                      | Cria no banco local as contas de teste (admin, coletor, cidadão)                 |
-| `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                              |
+| Comando                                | O que faz                                                                               |
+| -------------------------------------- | --------------------------------------------------------------------------------------- |
+| `npm run dev`                          | Sobe a API com hot-reload (reinicia sozinha a cada alteração de código)                 |
+| `npm run build`                        | Compila o TypeScript para `dist/` (verifica erros de tipo)                              |
+| `npm start`                            | Roda a versão compilada (`dist/server.js`) — usar em produção, depois do `build`        |
+| `npx prisma generate`                  | Regenera o cliente Prisma após mexer no `schema.prisma`                                 |
+| `npx prisma migrate dev --name <nome>` | Cria uma nova migration a partir de mudanças no `schema.prisma`                         |
+| `npx prisma studio`                    | Abre uma interface visual no navegador para ver/editar os dados do banco                |
+| `npm run lint`                         | Verifica o código com ESLint                                                            |
+| `npm run lint:fix`                     | Verifica e corrige automaticamente o que der pra corrigir                               |
+| `npm run format`                       | Formata todo o código com Prettier                                                      |
+| `npm run format:check`                 | Só verifica a formatação, sem alterar nada                                              |
+| `npm run db:up`                        | Sobe o MySQL via Docker Compose e espera ele ficar saudável                             |
+| `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                                |
+| `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                                   |
+| `npm run db:replica:status`            | Mostra o estado da replicação (`SHOW REPLICA STATUS`) da réplica de leitura             |
+| `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                         |
+| `npm run db:migrate -- --name <nome>`  | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)                   |
+| `npm run db:migrate:status`            | Mostra quais migrations já foram aplicadas no banco                                     |
+| `npm run db:migrate:deploy`            | Aplica migrations pendentes em produção (sem criar novas)                               |
+| `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                         |
+| `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                           |
+| `npm run db:seed`                      | Cria no banco local as categorias padrão e as contas de teste (admin, coletor, cidadão) |
+| `npm run db:setup`                     | Ambiente novo: sobe o MySQL, aplica as migrations, gera o client e roda o seed          |
+| `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                                     |
+| `npm run load-test:seed`               | Insere pontos de coleta fictícios para o teste de carga (`-- --clean` remove)           |
+
+## Busca de pontos de coleta
+
+`GET /collection-points` é público e devolve só pontos **aprovados**. Todos os filtros são opcionais e podem ser combinados:
+
+| Parâmetro               | Exemplo               | O que faz                                                                                       |
+| ----------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
+| `city`                  | `Manhuaçu`            | Cidade (ignora maiúsculas e acentos)                                                            |
+| `wasteType`             | `PLASTIC,GLASS`       | Um ou mais tipos separados por vírgula; devolve pontos que aceitam **qualquer** um deles        |
+| `latitude`, `longitude` | `-20.258`, `-42.0336` | Ponto de referência (sempre juntos). Ordena por distância e adiciona `distanceKm` em cada ponto |
+| `radius`                | `5`                   | Raio em km (até 100). Exige `latitude` e `longitude`                                            |
+| `limit`                 | `50`                  | Máximo de pontos devolvidos (padrão 100, até 500)                                               |
+
+O cabeçalho `X-Total-Count` informa quantos pontos atendem aos filtros antes do `limit`. Valores inválidos retornam `400`. A documentação completa está no Swagger (`/docs`).
 
 ## Pool de conexões e teste de carga
 
@@ -285,7 +304,13 @@ RATE_LIMIT_MAX=100000000 npm run dev
 npm run load-test
 ```
 
-Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_PATH` (padrão `/collection-points`) e `LOAD_TEST_URL`. O comando termina com erro se qualquer requisição falhar. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
+O teste percorre cenários de filtros combinados de `GET /collection-points` (sem filtro, cidade, tipo de resíduo, vários tipos, raio, cidade + tipo + raio, raio máximo e origem sem raio), cada um com um aquecimento antes da medição. Ele termina com erro se qualquer requisição falhar **ou** se o p99 de algum cenário passar de 2 s (requisito de busca da BE-07).
+
+Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_WARMUP_SECONDS` (padrão `3`), `LOAD_TEST_MAX_LATENCY_MS` (padrão `2000`), `LOAD_TEST_PATH` (roda só esse caminho em vez dos cenários) e `LOAD_TEST_URL`. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
+
+**Volume de dados:** para medir com um volume realista, rode `npm run load-test:seed` (insere 5.000 pontos com o prefixo `[LOAD]`, 90% aprovados; precisa de um usuário coletor, criado pelo `db:seed`). Passe outro total com `npm run load-test:seed -- 20000` e remova tudo com `npm run load-test:seed -- --clean`.
+
+**Resultado da BE-07** (5.000 pontos, 100 conexões simultâneas sem intervalo entre requisições, MySQL 8.4 em Docker, máquina de desenvolvimento): p99 entre ~0,9 s e ~1,9 s nos 8 cenários, sem erros nem timeouts; o pior caso é o raio de 100 km, que alcança todos os pontos. O custo é proporcional ao tamanho da resposta, por isso o `limit` padrão é 100.
 
 Cada cliente Prisma (primário e réplica) tem o seu próprio pool, com os mesmos limites.
 
