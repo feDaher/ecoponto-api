@@ -18,7 +18,6 @@ const validPoint = {
   latitude: -20.25,
   longitude: -42.03,
   wasteCategories: ["PLASTIC"],
-  operatingHours: [{ weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" }],
 };
 
 function givenPointOwnedBy(ownerId: string) {
@@ -28,6 +27,7 @@ function givenPointOwnedBy(ownerId: string) {
     ...point,
     ...validPoint,
     categories: [{ category: { name: "PLASTIC" } }],
+    hours: [],
   });
   prisma.operatingHours.findUnique.mockResolvedValue({
     id: HOURS_ID,

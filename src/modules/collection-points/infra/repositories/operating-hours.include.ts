@@ -26,9 +26,3 @@ export function formatHours(hours: StoredOperatingHour[]): PublicOperatingHour[]
     isActive,
   }));
 }
-
-export function withFormattedHours<T extends { hours: StoredOperatingHour[] }>(
-  point: T,
-): Omit<T, "hours"> & { hours: PublicOperatingHour[] } {
-  return { ...point, hours: formatHours(point.hours) };
-}

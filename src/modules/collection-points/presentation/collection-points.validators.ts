@@ -65,18 +65,31 @@ export const collectionPointSchema = collectionPointFields
   .extend({
     operatingHours: z
       .array(
-        z.object({
-          weekday: z.enum(weekdays),
-          openTime: timeOfDay,
-          closeTime: timeOfDay,
-        }),
+        z
+          .object({
+            weekday: z.enum(weekdays),
+            openTime: timeOfDay,
+            closeTime: timeOfDay,
+          })
+          .refine((hour) => hour.openTime < hour.closeTime, {
+            path: ["closeTime"],
+            message: "O horário de fechamento deve ser depois do horário de abertura",
+          }),
       )
       .min(1),
   })
   .superRefine(whatsappRule);
 
 // PUT: sem horários (alterados só pelas rotas /operating-hours)
-export const collectionPointUpdateSchema = collectionPointFields.superRefine(whatsappRule);
+export const collectionPointUpdateSchema = collectionPointFields
+  .extend({
+    operatingHours: z
+      .never({
+        error: "Os horários não são alterados aqui; use /collection-points/{id}/operating-hours",
+      })
+      .optional(),
+  })
+  .superRefine(whatsappRule);
 
 export type CollectionPointInput = z.infer<typeof collectionPointSchema>;
 export type CollectionPointUpdateInput = z.infer<typeof collectionPointUpdateSchema>;

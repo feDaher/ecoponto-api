@@ -29,13 +29,7 @@ function point(overrides: Record<string, unknown> = {}) {
     whatsappContact: "33999990000",
     showWhatsappContact: false,
     categories: [{ category: { name: "PLASTIC" } }],
-    hours: [] as {
-      id: string;
-      weekday: string;
-      openTime: Date;
-      closeTime: Date;
-      isActive: boolean;
-    }[],
+    hours: [] as { id: string; weekday: string; openTime: string; closeTime: string }[],
     status: CollectionPointStatus.APPROVED,
     hoursConfirmedAt: new Date("2026-10-01T00:00:00Z"),
     isOutdated: false,
@@ -65,9 +59,14 @@ function stubSearch({
         categories.map(({ category }) => ({ pointId: id, name: category.name })),
       );
     }
+    if (sql.sql.includes("FROM OperatingHours")) {
+      return hydrated.flatMap(({ id, hours }) => hours.map((hour) => ({ ...hour, pointId: id })));
+    }
     return ranked;
   });
-  prisma.collectionPoint.findMany.mockResolvedValue(hydrated);
+  prisma.collectionPoint.findMany.mockResolvedValue(
+    hydrated.map(({ categories: _categories, hours: _hours, ...row }) => row),
+  );
 }
 
 beforeEach(() => {
@@ -252,12 +251,6 @@ describe("GET /collection-points results", () => {
     expect(prisma.collectionPoint.findMany).toHaveBeenCalledWith({
       where: { id: { in: ["point-a"] } },
       omit: { rejectionReason: true, reviewedById: true, reviewedAt: true },
-      include: {
-        hours: {
-          where: { isActive: true },
-          orderBy: [{ weekday: "asc" }, { openTime: "asc" }],
-        },
-      },
     });
   });
 
@@ -267,15 +260,7 @@ describe("GET /collection-points results", () => {
       hydrated: [
         point({
           id: "point-a",
-          hours: [
-            {
-              id: "hour-1",
-              weekday: "MONDAY",
-              openTime: new Date("1970-01-01T08:00:00.000Z"),
-              closeTime: new Date("1970-01-01T17:30:00.000Z"),
-              isActive: true,
-            },
-          ],
+          hours: [{ id: "hour-1", weekday: "MONDAY", openTime: "08:00", closeTime: "17:30" }],
         }),
       ],
     });
@@ -287,6 +272,13 @@ describe("GET /collection-points results", () => {
       { id: "hour-1", weekday: "MONDAY", openTime: "08:00", closeTime: "17:30", isActive: true },
     ]);
     expect(response.body[0]).not.toHaveProperty("operatingHours");
+    const hoursQuery = queryRaw().mock.calls.find(([sql]) =>
+      sql.sql.includes("FROM OperatingHours"),
+    )?.[0] as Prisma.Sql;
+    expect(hoursQuery.sql).toContain("WHERE isActive = TRUE AND collectionPointId IN (?)");
+    expect(hoursQuery.sql).toContain("TIME_FORMAT(openTime, '%H:%i')");
+    expect(hoursQuery.sql).toContain("ORDER BY collectionPointId, weekday, openTime");
+    expect(hoursQuery.values).toEqual(["point-a"]);
   });
 
   it("keeps the ranking order regardless of the order the rows are hydrated in", async () => {

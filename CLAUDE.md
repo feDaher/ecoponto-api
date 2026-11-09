@@ -71,7 +71,7 @@ Performance rules worth keeping (measured with `load-test`, 5000 points, 100 con
 
 ### Collection point categories and hours
 
-Collection point categories are normalized through `PointCategory`, linked to active `WasteCategory` records by their `name` code. The `POST`/`PUT /collection-points` API accepts and returns `wasteCategories` as a list of codes for frontend compatibility; handlers translate that API field to relation writes, and public search filters through the relation. The BE-16 migration backfills existing JSON values before dropping the old column. `operatingHours` remains JSON on `CollectionPoint`, while the `OperatingHours` table is used by the per-point hours module.
+Collection point categories are normalized through `PointCategory`, linked to active `WasteCategory` records by their `name` code. The `POST`/`PUT /collection-points` API accepts and returns `wasteCategories` as a list of codes for frontend compatibility; handlers translate that API field to relation writes, and public search filters through the relation. The BE-16 migration backfills existing JSON values before dropping the old column. Operating hours live only in the `OperatingHours` table (BE-17): `POST /collection-points` requires `operatingHours` (each with `openTime` < `closeTime`) and writes them in the same nested create as the point; `PUT` rejects `operatingHours` with 400 (hours change only through `/collection-points/:id/operating-hours`); every point response carries the active rows as `hours` (`HH:mm`), including the public search. The BE-17 migration copies the old JSON into the table, skipping only slots that already exist there, before dropping the column.
 
 ### Collection point location (BE-04, RN04)
 
@@ -79,7 +79,7 @@ Collection point categories are normalized through `PointCategory`, linked to ac
 
 ### Outdated hours flag (BE-05)
 
-`CollectionPoint.hoursConfirmedAt` is reset to now (and `isOutdated` to false) whenever the collector creates/updates/deletes operating hours or resubmits the point via `PUT /collection-points/:id`. `startOutdatedHoursJob()` (`node-cron`, started from `server.ts`, daily 03:00 America/Sao_Paulo) flags points with `hoursConfirmedAt` older than 60 days as `isOutdated = true`; the flag is returned by the public collection-point endpoints. Only the point owner or an ADMIN may change a point's hours (`ensureCanManageCollectionPoint`).
+`CollectionPoint.hoursConfirmedAt` is reset to now (and `isOutdated` to false) whenever the collector creates/updates/deletes operating hours (and on point creation). Resubmitting the point via `PUT /collection-points/:id` does **not** touch it, since that route no longer changes hours. `startOutdatedHoursJob()` (`node-cron`, started from `server.ts`, daily 03:00 America/Sao_Paulo) flags points with `hoursConfirmedAt` older than 60 days as `isOutdated = true`; the flag is returned by the public collection-point endpoints. Only the point owner or an ADMIN may change a point's hours (`ensureCanManageCollectionPoint`).
 
 ### Request pipeline (`src/app.ts`)
 
