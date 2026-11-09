@@ -237,32 +237,34 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 
 ## Outros comandos úteis
 
-| Comando                                | O que faz                                                                               |
-| -------------------------------------- | --------------------------------------------------------------------------------------- |
-| `npm run dev`                          | Sobe a API com hot-reload (reinicia sozinha a cada alteração de código)                 |
-| `npm run build`                        | Compila o TypeScript para `dist/` (verifica erros de tipo)                              |
-| `npm start`                            | Roda a versão compilada (`dist/server.js`) — usar em produção, depois do `build`        |
-| `npx prisma generate`                  | Regenera o cliente Prisma após mexer no `schema.prisma`                                 |
-| `npx prisma migrate dev --name <nome>` | Cria uma nova migration a partir de mudanças no `schema.prisma`                         |
-| `npx prisma studio`                    | Abre uma interface visual no navegador para ver/editar os dados do banco                |
-| `npm run lint`                         | Verifica o código com ESLint                                                            |
-| `npm run lint:fix`                     | Verifica e corrige automaticamente o que der pra corrigir                               |
-| `npm run format`                       | Formata todo o código com Prettier                                                      |
-| `npm run format:check`                 | Só verifica a formatação, sem alterar nada                                              |
-| `npm run db:up`                        | Sobe o MySQL via Docker Compose e espera ele ficar saudável                             |
-| `npm run db:down`                      | Derruba o container do MySQL (mantém os dados no volume)                                |
-| `npm run db:logs`                      | Mostra os logs do MySQL em tempo real                                                   |
-| `npm run db:replica:status`            | Mostra o estado da replicação (`SHOW REPLICA STATUS`) da réplica de leitura             |
-| `npm run db:reset`                     | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                         |
-| `npm run db:migrate -- --name <nome>`  | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)                   |
-| `npm run db:migrate:status`            | Mostra quais migrations já foram aplicadas no banco                                     |
-| `npm run db:migrate:deploy`            | Aplica migrations pendentes em produção (sem criar novas)                               |
-| `npm run db:generate`                  | Mesmo que `npx prisma generate`                                                         |
-| `npm run db:studio`                    | Mesmo que `npx prisma studio`                                                           |
-| `npm run db:seed`                      | Cria no banco local as categorias padrão e as contas de teste (admin, coletor, cidadão) |
-| `npm run db:setup`                     | Ambiente novo: sobe o MySQL, aplica as migrations, gera o client e roda o seed          |
-| `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                                     |
-| `npm run load-test:seed`               | Insere pontos de coleta fictícios para o teste de carga (`-- --clean` remove)           |
+| Comando                                   | O que faz                                                                               |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `npm run dev`                             | Sobe a API com hot-reload (reinicia sozinha a cada alteração de código)                 |
+| `npm run build`                           | Compila o TypeScript para `dist/` (verifica erros de tipo)                              |
+| `npm start`                               | Roda a versão compilada (`dist/server.js`) — usar em produção, depois do `build`        |
+| `npx prisma generate`                     | Regenera o cliente Prisma após mexer no `schema.prisma`                                 |
+| `npx prisma migrate dev --name <nome>`    | Cria uma nova migration a partir de mudanças no `schema.prisma`                         |
+| `npx prisma studio`                       | Abre uma interface visual no navegador para ver/editar os dados do banco                |
+| `npm run lint`                            | Verifica o código com ESLint                                                            |
+| `npm run lint:fix`                        | Verifica e corrige automaticamente o que der pra corrigir                               |
+| `npm run format`                          | Formata todo o código com Prettier                                                      |
+| `npm run format:check`                    | Só verifica a formatação, sem alterar nada                                              |
+| `npm run db:up`                           | Sobe o MySQL via Docker Compose e espera ele ficar saudável                             |
+| `npm run db:down`                         | Derruba o container do MySQL (mantém os dados no volume)                                |
+| `npm run db:logs`                         | Mostra os logs do MySQL em tempo real                                                   |
+| `npm run db:replica:status`               | Mostra o estado da replicação (`SHOW REPLICA STATUS`) da réplica de leitura             |
+| `npm run db:reset`                        | **Apaga todos os dados** do banco e sobe um MySQL limpo do zero                         |
+| `npm run db:migrate -- --name <nome>`     | Cria e aplica uma nova migration (mesmo que `npx prisma migrate dev`)                   |
+| `npm run db:migrate:status`               | Mostra quais migrations já foram aplicadas no banco                                     |
+| `npm run db:migrate:deploy`               | Aplica migrations pendentes em produção (sem criar novas)                               |
+| `npm run db:generate`                     | Mesmo que `npx prisma generate`                                                         |
+| `npm run db:studio`                       | Mesmo que `npx prisma studio`                                                           |
+| `npm run db:seed`                         | Cria no banco local as categorias padrão e as contas de teste (admin, coletor, cidadão) |
+| `npm run db:setup`                        | Ambiente novo: sobe o MySQL, aplica as migrations, gera o client e roda o seed          |
+| `npm run db:backup`                       | Gera um backup compactado do banco em `backups/` (veja a seção de backup)               |
+| `npm run db:restore -- <arquivo> [banco]` | Restaura um backup (por padrão no banco separado `ecoponto_restore`)                    |
+| `npm run load-test`                       | Teste de carga na API rodando (veja a seção abaixo)                                     |
+| `npm run load-test:seed`                  | Insere pontos de coleta fictícios para o teste de carga (`-- --clean` remove)           |
 
 ## Busca de pontos de coleta
 
@@ -339,6 +341,49 @@ Não use `prismaRead` para ler algo logo depois de gravar (ex: devolver o regist
 - As migrations rodam só no primário (`DATABASE_URL`); as tabelas chegam à réplica pela replicação.
 - **Volume criado antes da réplica?** O usuário de replicação, o `ecoponto_reader` e o histórico de GTID só existem em volumes criados a partir desta versão. Se a réplica não ficar saudável no `db:up`, rode `npm run db:reset` (**apaga os dados locais**), depois `npm run db:migrate` e `npm run db:seed`.
 - Em produção a réplica não seria esse container: use TLS na conexão (o `allowPublicKeyRetrieval` só é ligado fora de produção) e senhas próprias, fora do repositório.
+
+## Backup e restauração do banco
+
+`npm run db:backup` gera `backups/ecoponto_AAAA-MM-DD_HH-MM-SS.sql.gz` a partir do container do MySQL. O script:
+
+- usa `--single-transaction` (backup consistente sem travar as tabelas) e inclui procedures, triggers e eventos;
+- usa `--set-gtid-purged=OFF`: o primário roda com GTID (réplica), e sem essa opção o restore falha com `ERROR 3546`;
+- **falha de verdade** (código de saída diferente de 0) se o MySQL estiver parado ou o dump vier incompleto. O arquivo só é gravado depois de conferido (gzip íntegro e dump terminado), e os backups antigos só são apagados depois disso;
+- apaga os backups com mais de 30 dias;
+- lê a senha de root do próprio container (`MYSQL_ROOT_PASSWORD`), sem senha fixa no script.
+
+Para restaurar:
+
+```bash
+npm run db:restore -- backups/ecoponto_2026-11-08_03-00-00.sql.gz               # restaura em ecoponto_restore
+npm run db:restore -- backups/ecoponto_2026-11-08_03-00-00.sql.gz ecoponto      # recupera o banco principal
+```
+
+- Sem o segundo argumento, o backup vai para o banco separado `ecoponto_restore`, o jeito seguro de **testar** um backup sem tocar nos dados atuais.
+- Se o banco de destino já tiver tabelas, ele é **apagado e recriado**, e o script pede para digitar o nome do banco como confirmação. Fora de um terminal (ex.: agendador), confirme com `RESTORE_CONFIRM=<banco>`.
+- Arquivos corrompidos ou com dump incompleto são recusados antes de qualquer alteração.
+- Restaurar no primário também chega à réplica, pela replicação.
+
+Variáveis opcionais: `MYSQL_CONTAINER` (padrão `ecoponto-mysql`), `BACKUP_DATABASE` (padrão `ecoponto`), `BACKUP_DIR` (padrão `backups`) e `BACKUP_RETENTION_DAYS` (padrão `30`).
+
+**Agendamento diário** (às 03:00):
+
+- **Windows** (Agendador de Tarefas): rode uma vez no PowerShell, **na pasta do projeto**. O Docker Desktop precisa estar aberto no horário do backup.
+
+  ```powershell
+  $action = New-ScheduledTaskAction -Execute "C:\Program Files\Git\bin\bash.exe" -Argument '-c "mkdir -p backups && bash scripts/backup.sh >> backups/backup.log 2>&1"' -WorkingDirectory (Get-Location).Path
+  Register-ScheduledTask -TaskName "EcoPonto backup" -Action $action -Trigger (New-ScheduledTaskTrigger -Daily -At 3am)
+  ```
+
+  Para testar na hora: `Start-ScheduledTask "EcoPonto backup"`. Para remover: `Unregister-ScheduledTask "EcoPonto backup"`.
+
+- **Linux/macOS** (`crontab -e`):
+
+  ```
+  0 3 * * * cd /caminho/para/ecoponto-api && mkdir -p backups && bash scripts/backup.sh >> backups/backup.log 2>&1
+  ```
+
+Um backup só vale se o restore funciona: de tempos em tempos, restaure o mais recente em `ecoponto_restore` e confira os dados.
 
 ## Cadastro de ponto: como enviar a localização
 

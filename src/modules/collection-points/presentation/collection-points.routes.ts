@@ -1,93 +1,25 @@
 import { Router } from "express";
-import { env } from "../../../config/env";
-import { prisma } from "../../../config/prisma";
+import { Role } from "../../../generated/prisma/enums";
 import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
-import { CollectionPointStatus, Role } from "../../../generated/prisma/enums";
-import { AppError } from "../../../shared/errors/AppError";
-import { assertOwner } from "../../../shared/security/access-policy";
-import { toTime } from "../../../shared/time/time-of-day";
-import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
-import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
-import { SearchCollectionPointsUseCase } from "../domain/use-cases/SearchCollectionPointsUseCase";
-import { PrismaCollectionPointSearchRepository } from "../infra/repositories/PrismaCollectionPointSearchRepository";
-import {
-  activeHoursInclude,
-  withFormattedHours,
-} from "../infra/repositories/operating-hours.include";
-import { toPublicCollectionPoint } from "./collection-points.presenter";
-import { PrismaWasteCategoryRepository } from "../../waste-categories/infra/repositories/PrismaWasteCategoryRepository";
 import {
   collectionPointSchema,
   collectionPointUpdateSchema,
   reviewSchema,
   searchCollectionPointsQuerySchema,
-  type CollectionPointInput,
-  type CollectionPointUpdateInput,
-  type SearchCollectionPointsQuery,
 } from "./collection-points.validators";
+import {
+  create,
+  findApprovedById,
+  listMine,
+  listPending,
+  listPublic,
+  review,
+  update,
+} from "./collection-points.controller";
 
 export const collectionPointsRoutes = Router();
-
-const pointWithCollector = {
-  collector: { select: { id: true, name: true, email: true } },
-} as const;
-
-const pointWithCategories = {
-  categories: { include: { category: { select: { name: true } } } },
-} as const;
-
-const pointWithCategoriesAndHours = { ...pointWithCategories, ...activeHoursInclude };
-
-// Moderation details are internal — never expose them on the public map.
-const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
-
-const searchCollectionPoints = new SearchCollectionPointsUseCase(
-  new PrismaCollectionPointSearchRepository(),
-);
-
-const resolveLocation = new ResolveLocationUseCase(new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY));
-const wasteCategoryRepository = new PrismaWasteCategoryRepository();
-
-type PointWithCategories = {
-  categories: { category: { name: string } }[];
-};
-
-function serializePoint<T extends PointWithCategories>(point: T) {
-  const { categories, ...pointData } = point;
-  return {
-    ...pointData,
-    wasteCategories: categories.map(({ category }) => category.name).sort(),
-  };
-}
-
-async function findActiveWasteCategories(codes: string[]) {
-  const categories = await wasteCategoryRepository.findActiveByNames(codes);
-  const activeCodes = new Set(categories.map(({ name }) => name));
-  const invalidCodes = codes.filter((code) => !activeCodes.has(code));
-
-  if (invalidCodes.length > 0) {
-    throw new AppError(
-      `Categorias de resíduos inexistentes ou inativas: ${invalidCodes.join(", ")}`,
-      400,
-    );
-  }
-
-  return categories;
-}
-
-async function withResolvedLocation(body: CollectionPointUpdateInput) {
-  const { latitude, longitude, placeId } = body;
-  const location = await resolveLocation.execute({ latitude, longitude, placeId });
-
-  return {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    locationSource: location.source,
-    placeId: location.placeId,
-  };
-}
 
 /**
  * @openapi
@@ -155,30 +87,7 @@ async function withResolvedLocation(body: CollectionPointUpdateInput) {
 collectionPointsRoutes.get(
   "/collection-points",
   validate(searchCollectionPointsQuerySchema, "query"),
-  async (req, res) => {
-    const { city, wasteType, latitude, longitude, radius, limit } =
-      req.query as unknown as SearchCollectionPointsQuery;
-
-    const [, { items, total }] = await Promise.all([
-      wasteType ? findActiveWasteCategories(wasteType) : undefined,
-      searchCollectionPoints.execute({
-        city,
-        wasteTypes: wasteType,
-        origin:
-          latitude !== undefined && longitude !== undefined ? { latitude, longitude } : undefined,
-        radiusKm: radius,
-        limit,
-      }),
-    ]);
-
-    res.setHeader("X-Total-Count", String(total));
-    res.status(200).json(
-      items.map(({ point, distanceKm }) => ({
-        ...toPublicCollectionPoint(point),
-        ...(distanceKm === null ? {} : { distanceKm: Math.round(distanceKm * 100) / 100 }),
-      })),
-    );
-  },
+  listPublic,
 );
 
 /**
@@ -191,19 +100,16 @@ collectionPointsRoutes.get(
  *     responses:
  *       200:
  *         description: The collector's points, including moderation status
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not a collector
  */
 collectionPointsRoutes.get(
   "/collection-points/mine",
   authenticate,
   authorize(Role.COLLECTOR),
-  async (req, res) => {
-    const points = await prisma.collectionPoint.findMany({
-      where: { collectorId: req.user!.id },
-      orderBy: { updatedAt: "desc" },
-      include: pointWithCategoriesAndHours,
-    });
-    res.status(200).json(points.map((point) => serializePoint(withFormattedHours(point))));
-  },
+  listMine,
 );
 
 /**
@@ -216,19 +122,16 @@ collectionPointsRoutes.get(
  *     responses:
  *       200:
  *         description: Points pending approval
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not an administrator
  */
 collectionPointsRoutes.get(
   "/collection-points/admin/pending",
   authenticate,
   authorize(Role.ADMIN),
-  async (_req, res) => {
-    const points = await prisma.collectionPoint.findMany({
-      where: { status: CollectionPointStatus.PENDING },
-      include: { ...pointWithCollector, ...pointWithCategoriesAndHours },
-      orderBy: { createdAt: "asc" },
-    });
-    res.status(200).json(points.map((point) => serializePoint(withFormattedHours(point))));
-  },
+  listPending,
 );
 
 /**
@@ -248,7 +151,11 @@ collectionPointsRoutes.get(
  *       201:
  *         description: Point submitted for approval, with its operating hours (field `hours`, read from the OperatingHours table)
  *       400:
- *         description: Malformed request body
+ *         description: Malformed body or unknown/inactive category
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not a collector
  *       422:
  *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
  *       503:
@@ -259,29 +166,7 @@ collectionPointsRoutes.post(
   authenticate,
   authorize(Role.COLLECTOR),
   validate(collectionPointSchema),
-  async (req, res) => {
-    const { wasteCategories, operatingHours, ...pointData } = req.body as CollectionPointInput;
-    const categories = await findActiveWasteCategories(wasteCategories);
-    const point = await prisma.collectionPoint.create({
-      data: {
-        ...pointData,
-        ...(await withResolvedLocation(req.body)),
-        collectorId: req.user!.id,
-        categories: {
-          create: categories.map(({ id }) => ({ category: { connect: { id } } })),
-        },
-        hours: {
-          create: operatingHours.map((hour) => ({
-            weekday: hour.weekday,
-            openTime: toTime(hour.openTime),
-            closeTime: toTime(hour.closeTime),
-          })),
-        },
-      },
-      include: pointWithCategoriesAndHours,
-    });
-    res.status(201).json(serializePoint(withFormattedHours(point)));
-  },
+  create,
 );
 
 /**
@@ -301,16 +186,7 @@ collectionPointsRoutes.post(
  *       404:
  *         description: Point not found or not approved
  */
-collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
-  const pointId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const point = await prisma.collectionPoint.findFirst({
-    where: { id: pointId, status: CollectionPointStatus.APPROVED },
-    omit: publicOmit,
-    include: pointWithCategoriesAndHours,
-  });
-  if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
-  res.status(200).json(toPublicCollectionPoint(serializePoint(withFormattedHours(point))));
-});
+collectionPointsRoutes.get("/collection-points/:id", findApprovedById);
 
 /**
  * @openapi
@@ -333,47 +209,25 @@ collectionPointsRoutes.get("/collection-points/:id", async (req, res) => {
  *     responses:
  *       200:
  *         description: Updated point resubmitted for approval. Operating hours are not changed here; use /collection-points/{id}/operating-hours
+ *       400:
+ *         description: Malformed body or unknown/inactive category
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not a collector or does not own the point
+ *       404:
+ *         description: Point not found
  *       422:
- *         description: Missing or invalid location
+ *         description: Missing or invalid location (coordinates outside Brazil, unverifiable address, or coordinates far from the address)
+ *       503:
+ *         description: Address verification service unavailable
  */
 collectionPointsRoutes.put(
   "/collection-points/:id",
   authenticate,
   authorize(Role.COLLECTOR),
   validate(collectionPointUpdateSchema),
-  async (req, res) => {
-    const pointId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const existing = await prisma.collectionPoint.findUnique({
-      where: { id: pointId },
-    });
-    if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
-    assertOwner(
-      req.user!,
-      existing.collectorId,
-      "Você só pode atualizar seus próprios pontos de coleta",
-    );
-
-    // Horários não são alterados aqui: só pelas rotas /collection-points/:id/operating-hours.
-    const { wasteCategories, ...pointData } = req.body as CollectionPointUpdateInput;
-    const categories = await findActiveWasteCategories(wasteCategories);
-    const point = await prisma.collectionPoint.update({
-      where: { id: existing.id },
-      data: {
-        ...pointData,
-        ...(await withResolvedLocation(req.body)),
-        categories: {
-          deleteMany: {},
-          create: categories.map(({ id }) => ({ category: { connect: { id } } })),
-        },
-        status: CollectionPointStatus.PENDING,
-        rejectionReason: null,
-        reviewedById: null,
-        reviewedAt: null,
-      },
-      include: pointWithCategoriesAndHours,
-    });
-    res.status(200).json(serializePoint(withFormattedHours(point)));
-  },
+  update,
 );
 
 /**
@@ -398,34 +252,18 @@ collectionPointsRoutes.put(
  *       200:
  *         description: Moderation decision saved
  *       400:
- *         description: Invalid decision or reason missing
+ *         description: Invalid decision, missing reason or point is not pending
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not an administrator
+ *       404:
+ *         description: Point not found
  */
 collectionPointsRoutes.patch(
   "/collection-points/:id/review",
   authenticate,
   authorize(Role.ADMIN),
   validate(reviewSchema),
-  async (req, res) => {
-    const pointId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const existing = await prisma.collectionPoint.findUnique({
-      where: { id: pointId },
-    });
-    if (!existing) throw new AppError("Ponto de coleta não encontrado", 404);
-    if (existing.status !== CollectionPointStatus.PENDING) {
-      throw new AppError("Apenas pontos de coleta pendentes podem ser revisados", 400);
-    }
-
-    const point = await prisma.collectionPoint.update({
-      where: { id: existing.id },
-      data: {
-        status: req.body.status,
-        rejectionReason:
-          req.body.status === CollectionPointStatus.REJECTED ? req.body.rejectionReason : null,
-        reviewedById: req.user!.id,
-        reviewedAt: new Date(),
-      },
-      include: pointWithCategories,
-    });
-    res.status(200).json(serializePoint(point));
-  },
+  review,
 );

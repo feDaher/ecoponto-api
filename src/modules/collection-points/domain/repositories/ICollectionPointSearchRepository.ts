@@ -1,14 +1,8 @@
 import type { CollectionPoint } from "../../../../generated/prisma/client";
-import type { Weekday } from "../../../../generated/prisma/enums";
 import type { GeoPoint } from "../../../../shared/geo/distance";
+import type { CollectionPointHour } from "../entities/CollectionPoint";
 
-export interface PublicOperatingHour {
-  id: string;
-  weekday: Weekday;
-  openTime: string;
-  closeTime: string;
-  isActive: boolean;
-}
+export type PublicOperatingHour = CollectionPointHour;
 
 export type PublicCollectionPoint = Omit<
   CollectionPoint,

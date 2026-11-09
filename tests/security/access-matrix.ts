@@ -41,11 +41,15 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "DELETE /waste-categories/:id": [ADMIN],
 
   "GET /educational-content": PUBLIC,
+  "GET /educational-content/featured": PUBLIC,
   "GET /educational-content/category/:categoryId": PUBLIC,
   "GET /educational-content/:id": PUBLIC,
   "POST /educational-content": [ADMIN],
   "PATCH /educational-content/:id": [ADMIN],
   "DELETE /educational-content/:id": [ADMIN],
+  "GET /admin/educational-content": [ADMIN],
+  "GET /admin/educational-content/stats": [ADMIN],
+  "GET /admin/educational-content/:id": [ADMIN],
 
   "GET /places/autocomplete": PUBLIC,
   "GET /places/:placeId": PUBLIC,
