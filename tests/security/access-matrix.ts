@@ -46,6 +46,13 @@ export const ACCESS_MATRIX: Record<string, Access> = {
 
   "GET /places/autocomplete": PUBLIC,
   "GET /places/:placeId": PUBLIC,
+
+  "GET /reports/summary": [ADMIN, COLLECTOR],
+  "GET /reports/by-category": [ADMIN, COLLECTOR],
+  "GET /reports/by-point": [ADMIN, COLLECTOR],
+  "GET /reports/manifests": [ADMIN, COLLECTOR],
+  "GET /reports/filter-options": [ADMIN, COLLECTOR],
+  "GET /reports/export": [ADMIN, COLLECTOR],
 };
 
 export const PUBLIC_WRITE_ALLOWLIST = new Set(["POST /auth/register", "POST /auth/login"]);
