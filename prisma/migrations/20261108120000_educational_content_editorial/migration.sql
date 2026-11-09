@@ -1,15 +1,26 @@
--- AlterTable
+-- AlterTable: slug and summary start nullable so existing rows can be backfilled first
 ALTER TABLE `EducationalContent` ADD COLUMN `coverImageUrl` VARCHAR(1000) NULL,
     ADD COLUMN `featured` BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN `format` ENUM('DISPOSAL_GUIDE', 'DIY_TUTORIAL', 'QUICK_FACT', 'COMMUNITY_EVENT') NOT NULL DEFAULT 'DISPOSAL_GUIDE',
     ADD COLUMN `level` ENUM('ESSENTIAL', 'INTERMEDIATE', 'ADVANCED') NOT NULL DEFAULT 'ESSENTIAL',
     ADD COLUMN `publishedAt` DATETIME(3) NULL,
     ADD COLUMN `readingTimeMinutes` INTEGER NOT NULL DEFAULT 3,
-    ADD COLUMN `slug` VARCHAR(191) NOT NULL,
+    ADD COLUMN `slug` VARCHAR(191) NULL,
     ADD COLUMN `status` ENUM('DRAFT', 'PENDING_REVIEW', 'PUBLISHED') NOT NULL DEFAULT 'DRAFT',
-    ADD COLUMN `summary` VARCHAR(500) NOT NULL,
+    ADD COLUMN `summary` VARCHAR(500) NULL,
     ADD COLUMN `viewCount` INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN `xpReward` INTEGER NOT NULL DEFAULT 0;
+
+-- Backfill: existing contents were already public, so they stay published with a unique slug
+UPDATE `EducationalContent`
+SET `slug` = CONCAT('conteudo-', LOWER(`id`)),
+    `summary` = LEFT(TRIM(`content`), 500),
+    `status` = 'PUBLISHED',
+    `publishedAt` = `createdAt`;
+
+-- AlterTable
+ALTER TABLE `EducationalContent` MODIFY `slug` VARCHAR(191) NOT NULL,
+    MODIFY `summary` VARCHAR(500) NOT NULL;
 
 -- CreateIndex
 CREATE UNIQUE INDEX `EducationalContent_slug_key` ON `EducationalContent`(`slug`);

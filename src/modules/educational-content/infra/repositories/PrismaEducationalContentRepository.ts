@@ -1,4 +1,4 @@
-import { prisma } from "../../../../config/prisma";
+import { prisma, prismaRead } from "../../../../config/prisma";
 import { AppError } from "../../../../shared/errors/AppError";
 import { ContentFormat, ContentStatus } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
@@ -13,10 +13,10 @@ import type {
   UpdateEducationalContentData,
 } from "../../domain/repositories/IEducationalContentRepository";
 
-const ORDER_BY: Record<ContentSort, Prisma.EducationalContentOrderByWithRelationInput> = {
-  recent: { updatedAt: "desc" },
-  views: { viewCount: "desc" },
-  title: { title: "asc" },
+const ORDER_BY: Record<ContentSort, Prisma.EducationalContentOrderByWithRelationInput[]> = {
+  recent: [{ updatedAt: "desc" }, { id: "asc" }],
+  views: [{ viewCount: "desc" }, { id: "asc" }],
+  title: [{ title: "asc" }, { id: "asc" }],
 };
 
 export class PrismaEducationalContentRepository implements IEducationalContentRepository {
@@ -52,7 +52,7 @@ export class PrismaEducationalContentRepository implements IEducationalContentRe
         categoryId: filter.categoryId,
         format: filter.format,
       },
-      orderBy: { publishedAt: "desc" },
+      orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
     });
   }
 
@@ -95,13 +95,13 @@ export class PrismaEducationalContentRepository implements IEducationalContentRe
   async getStats(monthStart: Date): Promise<EducationalContentStats> {
     const [total, published, drafts, pendingReview, addedThisMonth, views, formats] =
       await Promise.all([
-        prisma.educationalContent.count(),
-        prisma.educationalContent.count({ where: { status: ContentStatus.PUBLISHED } }),
-        prisma.educationalContent.count({ where: { status: ContentStatus.DRAFT } }),
-        prisma.educationalContent.count({ where: { status: ContentStatus.PENDING_REVIEW } }),
-        prisma.educationalContent.count({ where: { createdAt: { gte: monthStart } } }),
-        prisma.educationalContent.aggregate({ _sum: { viewCount: true } }),
-        prisma.educationalContent.groupBy({ by: ["format"], _count: { _all: true } }),
+        prismaRead.educationalContent.count(),
+        prismaRead.educationalContent.count({ where: { status: ContentStatus.PUBLISHED } }),
+        prismaRead.educationalContent.count({ where: { status: ContentStatus.DRAFT } }),
+        prismaRead.educationalContent.count({ where: { status: ContentStatus.PENDING_REVIEW } }),
+        prismaRead.educationalContent.count({ where: { createdAt: { gte: monthStart } } }),
+        prismaRead.educationalContent.aggregate({ _sum: { viewCount: true } }),
+        prismaRead.educationalContent.groupBy({ by: ["format"], _count: { _all: true } }),
       ]);
 
     const byFormat = Object.fromEntries(
