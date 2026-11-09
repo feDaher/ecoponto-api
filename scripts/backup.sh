@@ -1,35 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
 
-#!/bin/bash
+CONTAINER="${MYSQL_CONTAINER:-ecoponto-mysql}"
+DATABASE="${BACKUP_DATABASE:-ecoponto}"
+BACKUP_DIR="${BACKUP_DIR:-backups}"
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
 
-# Configurações do backup
-CONTAINER="ecoponto-mysql"
-DATABASE="ecoponto"
-BACKUP_DIR="backups"
-RETENTION_DAYS=30
-
-# Cria a pasta de backups, caso não exista
-mkdir -p "$BACKUP_DIR"
-
-# Nome do arquivo com data e hora
-DATE=$(date +"%Y-%m-%d_%H-%M-%S" 2>/dev/null || powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'")
-BACKUP_FILE="$BACKUP_DIR/${DATABASE}_${DATE}.sql.gz"
-
-echo "Iniciando backup do banco $DATABASE..."
-
-# Realiza o backup e compacta o arquivo
-docker exec "$CONTAINER" sh -c \
-  'exec mysqldump -uroot -proot --single-transaction ecoponto' \
-  | gzip > "$BACKUP_FILE"
-
-# Verifica se o backup foi criado
-if [ $? -eq 0 ]; then
-    echo "Backup criado com sucesso: $BACKUP_FILE"
-else
-    echo "Erro ao criar backup!"
-    exit 1
+if [[ ! "$DATABASE" =~ ^[A-Za-z0-9_]{1,64}$ ]]; then
+  echo "Erro: nome de banco inválido: $DATABASE" >&2
+  exit 1
 fi
 
-# Remove backups com mais de 30 dias
-find "$BACKUP_DIR" -type f -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete
+mkdir -p "$BACKUP_DIR"
+BACKUP_FILE="$BACKUP_DIR/${DATABASE}_$(date +%Y-%m-%d_%H-%M-%S).sql.gz"
+PARTIAL_FILE="$BACKUP_FILE.partial"
+trap 'rm -f "$PARTIAL_FILE"' EXIT
 
-echo "Limpeza de backups antigos concluída."
+echo "Iniciando backup do banco $DATABASE (container $CONTAINER)..."
+
+docker exec "$CONTAINER" sh -c '
+  MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot \
+    --single-transaction --routines --triggers --events \
+    --set-gtid-purged=OFF --no-tablespaces "$1"
+' sh "$DATABASE" | gzip > "$PARTIAL_FILE"
+
+gzip -t "$PARTIAL_FILE"
+if ! gzip -dc "$PARTIAL_FILE" | tail -n 1 | grep -q "Dump completed"; then
+  echo "Erro: o dump está incompleto; nenhum backup foi gravado." >&2
+  exit 1
+fi
+
+mv "$PARTIAL_FILE" "$BACKUP_FILE"
+echo "Backup criado: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
+
+echo "Removendo backups com mais de $RETENTION_DAYS dias..."
+find "$BACKUP_DIR" -maxdepth 1 -type f -name "${DATABASE}_*.sql.gz" -mtime +"$RETENTION_DAYS" -print -delete
+echo "Concluído."
