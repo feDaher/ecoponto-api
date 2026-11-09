@@ -26,6 +26,7 @@
     "prepare": "husky",
     "test": "jest",
     "load-test": "ts-node --transpile-only src/scripts/load-test.ts",
+    "load-test:seed": "ts-node --transpile-only src/scripts/seed-load-points.ts",
     "test:coverage": "jest --coverage"
   },
   "lint-staged": {

@@ -133,22 +133,27 @@ describe("collection point category persistence", () => {
 
   it("filters public search through PointCategory and serializes codes", async () => {
     prisma.wasteCategory.findMany.mockResolvedValue([activeCategories[0]]);
-    prisma.collectionPoint.findMany.mockResolvedValue([pointWithCategories(["PLASTIC", "GLASS"])]);
+    const queryRaw = prisma["$queryRaw"] as unknown as jest.Mock;
+    queryRaw.mockImplementation(async (sql: { sql: string }) =>
+      sql.sql.includes("WHERE pc.pointId IN")
+        ? [
+            { pointId: "point-1", name: "PLASTIC" },
+            { pointId: "point-1", name: "GLASS" },
+          ]
+        : [{ id: "point-1", distanceKm: null }],
+    );
+    const { categories: _categories, ...hydratedPoint } = pointWithCategories([]);
+    prisma.collectionPoint.findMany.mockResolvedValue([hydratedPoint]);
 
     const response = await request(app).get("/collection-points?wasteType=PLASTIC");
 
     expect(response.status).toBe(200);
     expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
     expect(response.body[0]).not.toHaveProperty("categories");
-    expect(prisma.collectionPoint.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          categories: {
-            some: { category: { is: { name: "PLASTIC", active: true } } },
-          },
-        }),
-      }),
-    );
+    const [ranked] = queryRaw.mock.calls[0];
+    expect(ranked.sql).toContain("FROM PointCategory pc");
+    expect(ranked.sql).toContain("wc.active = TRUE");
+    expect(ranked.values).toContain("PLASTIC");
   });
 
   it.each([

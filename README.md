@@ -262,6 +262,21 @@ Para cadastrar usuários novos (`POST /auth/register`), **use e-mails de teste c
 | `npm run db:seed`                      | Cria no banco local as categorias padrão e as contas de teste (admin, coletor, cidadão) |
 | `npm run db:setup`                     | Ambiente novo: sobe o MySQL, aplica as migrations, gera o client e roda o seed          |
 | `npm run load-test`                    | Teste de carga na API rodando (veja a seção abaixo)                                     |
+| `npm run load-test:seed`               | Insere pontos de coleta fictícios para o teste de carga (`-- --clean` remove)           |
+
+## Busca de pontos de coleta
+
+`GET /collection-points` é público e devolve só pontos **aprovados**. Todos os filtros são opcionais e podem ser combinados:
+
+| Parâmetro               | Exemplo               | O que faz                                                                                       |
+| ----------------------- | --------------------- | ----------------------------------------------------------------------------------------------- |
+| `city`                  | `Manhuaçu`            | Cidade (ignora maiúsculas e acentos)                                                            |
+| `wasteType`             | `PLASTIC,GLASS`       | Um ou mais tipos separados por vírgula; devolve pontos que aceitam **qualquer** um deles        |
+| `latitude`, `longitude` | `-20.258`, `-42.0336` | Ponto de referência (sempre juntos). Ordena por distância e adiciona `distanceKm` em cada ponto |
+| `radius`                | `5`                   | Raio em km (até 100). Exige `latitude` e `longitude`                                            |
+| `limit`                 | `50`                  | Máximo de pontos devolvidos (padrão 100, até 500)                                               |
+
+O cabeçalho `X-Total-Count` informa quantos pontos atendem aos filtros antes do `limit`. Valores inválidos retornam `400`. A documentação completa está no Swagger (`/docs`).
 
 ## Pool de conexões e teste de carga
 
@@ -289,7 +304,13 @@ RATE_LIMIT_MAX=100000000 npm run dev
 npm run load-test
 ```
 
-Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_PATH` (padrão `/collection-points`) e `LOAD_TEST_URL`. O comando termina com erro se qualquer requisição falhar. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
+O teste percorre cenários de filtros combinados de `GET /collection-points` (sem filtro, cidade, tipo de resíduo, vários tipos, raio, cidade + tipo + raio, raio máximo e origem sem raio), cada um com um aquecimento antes da medição. Ele termina com erro se qualquer requisição falhar **ou** se o p99 de algum cenário passar de 2 s (requisito de busca da BE-07).
+
+Opções (variáveis de ambiente): `LOAD_TEST_CONNECTIONS` (padrão `100`), `LOAD_TEST_DURATION` em segundos (padrão `20`), `LOAD_TEST_WARMUP_SECONDS` (padrão `3`), `LOAD_TEST_MAX_LATENCY_MS` (padrão `2000`), `LOAD_TEST_PATH` (roda só esse caminho em vez dos cenários) e `LOAD_TEST_URL`. No PowerShell, defina as variáveis com `$env:RATE_LIMIT_MAX=100000000` antes do comando.
+
+**Volume de dados:** para medir com um volume realista, rode `npm run load-test:seed` (insere 5.000 pontos com o prefixo `[LOAD]`, 90% aprovados; precisa de um usuário coletor, criado pelo `db:seed`). Passe outro total com `npm run load-test:seed -- 20000` e remova tudo com `npm run load-test:seed -- --clean`.
+
+**Resultado da BE-07** (5.000 pontos, 100 conexões simultâneas sem intervalo entre requisições, MySQL 8.4 em Docker, máquina de desenvolvimento): p99 entre ~0,9 s e ~1,9 s nos 8 cenários, sem erros nem timeouts; o pior caso é o raio de 100 km, que alcança todos os pontos. O custo é proporcional ao tamanho da resposta, por isso o `limit` padrão é 100.
 
 Cada cliente Prisma (primário e réplica) tem o seu próprio pool, com os mesmos limites.
 

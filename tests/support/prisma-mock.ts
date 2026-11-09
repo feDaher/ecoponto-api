@@ -9,6 +9,7 @@ const defaultResult = (method: string) => {
 };
 
 const models = new Map<string, ModelMock>();
+const clientMethods = new Map<string, jest.Mock>();
 
 function modelMock(): ModelMock {
   return new Proxy({} as ModelMock, {
@@ -21,6 +22,16 @@ function modelMock(): ModelMock {
 
 export const prisma = new Proxy({} as Record<string, ModelMock>, {
   get(_target, model: string) {
+    if (model.startsWith("$")) {
+      if (!clientMethods.has(model)) {
+        clientMethods.set(
+          model,
+          jest.fn(async () => []),
+        );
+      }
+      return clientMethods.get(model);
+    }
+
     if (!models.has(model)) {
       models.set(model, modelMock());
     }
@@ -30,6 +41,7 @@ export const prisma = new Proxy({} as Record<string, ModelMock>, {
 
 export function resetPrismaMock() {
   models.clear();
+  clientMethods.clear();
 }
 
 // Without a replica the real module also points prismaRead at the primary client.
