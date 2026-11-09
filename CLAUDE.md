@@ -56,9 +56,9 @@ Express 5 + TypeScript API, organized as **Clean Architecture applied per featur
 
 `src/modules/auth/` is the reference implementation of this pattern — follow its shape (`domain/{entities,repositories,use-cases}`, `infra/{repositories,http}`, `presentation/{*.controller,*.routes,*.validators}`) when adding new modules. `src/modules/health/` and `src/modules/users/` are intentionally thin (no domain/infra layers) since they don't have real business logic yet. `collection-points/` still talks to Prisma straight from its routes (pending refactor into use-cases); `waste-categories/`, `operating-hours/` and `educational-content/` already follow the layered shape. `waste-categories/` is the single module for the category taxonomy — reuse its repository instead of creating another one.
 
-### Collection point data that exists in two places
+### Collection point categories and hours
 
-`CollectionPoint` still carries `wasteCategories` and `operatingHours` as JSON (written by `POST/PUT /collection-points` and used by the public search filter `wasteType` via `array_contains`), while the normalized `PointCategory` and `OperatingHours` tables are written by the `operating-hours/` module. Until they are unified, keep both in mind: the search reads the JSON, the per-point hours endpoint reads the table.
+Collection point categories are normalized through `PointCategory`, linked to active `WasteCategory` records by their `name` code. The `POST`/`PUT /collection-points` API accepts and returns `wasteCategories` as a list of codes for frontend compatibility; handlers translate that API field to relation writes, and public search filters through the relation. The BE-16 migration backfills existing JSON values before dropping the old column. `operatingHours` remains JSON on `CollectionPoint`, while the `OperatingHours` table is used by the per-point hours module.
 
 ### Collection point location (BE-04, RN04)
 

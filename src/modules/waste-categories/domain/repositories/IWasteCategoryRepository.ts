@@ -13,6 +13,7 @@ export interface IWasteCategoryRepository {
   create(data: CreateWasteCategoryData): Promise<WasteCategory>;
   findById(id: string): Promise<WasteCategory | null>;
   findByName(name: string): Promise<WasteCategory | null>;
+  findActiveByNames(names: string[]): Promise<WasteCategory[]>;
   findMany(): Promise<WasteCategory[]>;
   update(id: string, data: UpdateWasteCategoryData): Promise<WasteCategory>;
   deactivate(id: string): Promise<void>;
