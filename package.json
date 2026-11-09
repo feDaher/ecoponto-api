@@ -22,6 +22,8 @@
     "db:migrate:status": "prisma migrate status",
     "db:studio": "prisma studio",
     "db:seed": "ts-node --transpile-only src/database/seed.ts",
+    "db:backup": "bash scripts/backup.sh",
+    "db:restore": "bash scripts/restore.sh",
     "db:setup": "npm run db:up && prisma migrate deploy && prisma generate && npm run db:seed",
     "prepare": "husky",
     "test": "jest",
