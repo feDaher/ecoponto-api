@@ -96,7 +96,6 @@ model CollectionPoint {
   placeId             String?               @db.VarChar(512)
   whatsappContact     String?
   showWhatsappContact Boolean               @default(false)
-  operatingHours      Json
   status              CollectionPointStatus @default(PENDING)
   rejectionReason     String?               @db.Text
   reviewedById        String?

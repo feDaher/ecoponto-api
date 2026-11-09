@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "../config/prisma";
-import { CollectionPointStatus, Role } from "../generated/prisma/enums";
+import { CollectionPointStatus, Role, Weekday } from "../generated/prisma/enums";
 import { wasteTypes } from "../modules/collection-points/presentation/collection-points.validators";
+import { toTime } from "../shared/time/time-of-day";
 
 const LOAD_PREFIX = "[LOAD] ";
 const BATCH_SIZE = 500;
@@ -18,8 +19,8 @@ const cities = [
 ];
 
 const operatingHours = [
-  { weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" },
-  { weekday: "TUESDAY", openTime: "08:00", closeTime: "17:00" },
+  { weekday: Weekday.MONDAY, openTime: toTime("08:00"), closeTime: toTime("17:00") },
+  { weekday: Weekday.TUESDAY, openTime: toTime("08:00"), closeTime: toTime("17:00") },
 ];
 
 function createRandom(seed: number) {
@@ -87,6 +88,7 @@ async function populate(total: number) {
     const size = Math.min(BATCH_SIZE, total - created);
 
     const links: { pointId: string; categoryId: string }[] = [];
+    const hours: ({ collectionPointId: string } & (typeof operatingHours)[number])[] = [];
 
     await prisma.collectionPoint.createMany({
       data: Array.from({ length: size }, (_, index) => {
@@ -98,6 +100,10 @@ async function populate(total: number) {
           links.push({ pointId: id, categoryId: categoryIds.get(wasteType)! });
         }
 
+        for (const hour of operatingHours) {
+          hours.push({ collectionPointId: id, ...hour });
+        }
+
         return {
           id,
           collectorId: collector.id,
@@ -106,13 +112,13 @@ async function populate(total: number) {
           address: `Rua ${number}, ${city.name}`,
           latitude: city.latitude + (random() - 0.5) * 0.16,
           longitude: city.longitude + (random() - 0.5) * 0.16,
-          operatingHours,
           status: pickStatus(random),
         };
       }),
     });
 
     await prisma.pointCategory.createMany({ data: links });
+    await prisma.operatingHours.createMany({ data: hours });
 
     console.log(`Inserted ${created + size}/${total}`);
   }

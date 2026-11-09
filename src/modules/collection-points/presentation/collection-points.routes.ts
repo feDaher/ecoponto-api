@@ -5,6 +5,7 @@ import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
 import {
   collectionPointSchema,
+  collectionPointUpdateSchema,
   reviewSchema,
   searchCollectionPointsQuerySchema,
 } from "./collection-points.validators";
@@ -74,7 +75,7 @@ export const collectionPointsRoutes = Router();
  *         description: Maximum number of points returned
  *     responses:
  *       200:
- *         description: Public collection points (approved only)
+ *         description: Public collection points (approved only), each with its active operating hours in the hours field
  *         headers:
  *           X-Total-Count:
  *             description: Number of points matching the filters, before `limit` is applied
@@ -148,7 +149,7 @@ collectionPointsRoutes.get(
  *             $ref: '#/components/schemas/CollectionPointInput'
  *     responses:
  *       201:
- *         description: Point submitted for approval
+ *         description: Point submitted for approval, with its operating hours (field `hours`, read from the OperatingHours table)
  *       400:
  *         description: Malformed body or unknown/inactive category
  *       401:
@@ -181,7 +182,7 @@ collectionPointsRoutes.post(
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Approved collection point
+ *         description: Approved collection point, with its active operating hours in the hours field
  *       404:
  *         description: Point not found or not approved
  */
@@ -204,10 +205,10 @@ collectionPointsRoutes.get("/collection-points/:id", findApprovedById);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CollectionPointInput'
+ *             $ref: '#/components/schemas/CollectionPointUpdateInput'
  *     responses:
  *       200:
- *         description: Updated point resubmitted for approval
+ *         description: Updated point resubmitted for approval. Operating hours are not changed here; use /collection-points/{id}/operating-hours
  *       400:
  *         description: Malformed body or unknown/inactive category
  *       401:
@@ -225,7 +226,7 @@ collectionPointsRoutes.put(
   "/collection-points/:id",
   authenticate,
   authorize(Role.COLLECTOR),
-  validate(collectionPointSchema),
+  validate(collectionPointUpdateSchema),
   update,
 );
 

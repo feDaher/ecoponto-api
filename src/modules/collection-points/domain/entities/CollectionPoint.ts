@@ -1,9 +1,15 @@
 export type CollectionPointStatus = "PENDING" | "APPROVED" | "REJECTED" | "INACTIVE";
 export type CollectionPointLocationSource = "GPS_COORDINATES" | "VERIFIED_ADDRESS";
+export type CollectionPointWeekday =
+  "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
 export interface CollectionPointOperatingHours {
-  weekday: string;
+  weekday: CollectionPointWeekday;
   openTime: string;
   closeTime: string;
+}
+export interface CollectionPointHour extends CollectionPointOperatingHours {
+  id: string;
+  isActive: boolean;
 }
 export interface CollectionPoint {
   id: string;
@@ -18,7 +24,7 @@ export interface CollectionPoint {
   placeId: string | null;
   whatsappContact: string | null;
   showWhatsappContact: boolean;
-  operatingHours: CollectionPointOperatingHours[];
+  hours: CollectionPointHour[];
   status: CollectionPointStatus;
   rejectionReason?: string | null;
   reviewedById?: string | null;
@@ -41,5 +47,7 @@ export interface CollectionPointDraft {
   whatsappContact?: string;
   showWhatsappContact: boolean;
   wasteCategories: string[];
+}
+export interface NewCollectionPointDraft extends CollectionPointDraft {
   operatingHours: CollectionPointOperatingHours[];
 }

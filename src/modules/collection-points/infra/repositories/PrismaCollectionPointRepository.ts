@@ -1,26 +1,26 @@
 import { prisma } from "../../../../config/prisma";
 import { CollectionPointStatus } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
-import type {
-  CollectionPoint,
-  CollectionPointOperatingHours,
-} from "../../domain/entities/CollectionPoint";
+import { toTime } from "../../../../shared/time/time-of-day";
+import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
 import type {
   CollectionPointWriteData,
   CreateCollectionPointData,
   ICollectionPointRepository,
   ReviewCollectionPointData,
 } from "../../domain/repositories/ICollectionPointRepository";
+import { activeHoursInclude, formatHours } from "./operating-hours.include";
 
 const pointWithCategories = {
   categories: { include: { category: { select: { name: true } } } },
 } as const;
+const pointWithDetails = { ...pointWithCategories, ...activeHoursInclude };
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 type PublicPointRow = Prisma.CollectionPointGetPayload<{
-  include: typeof pointWithCategories;
+  include: typeof pointWithDetails;
   omit: typeof publicOmit;
 }>;
 
@@ -33,32 +33,6 @@ type PointRow = PublicPointRow &
   > & {
     collector?: { id: string; name: string; email: string };
   };
-
-function isOperatingHour(value: Prisma.JsonValue): value is Prisma.JsonObject & {
-  weekday: string;
-  openTime: string;
-  closeTime: string;
-} {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof value.weekday === "string" &&
-    typeof value.openTime === "string" &&
-    typeof value.closeTime === "string"
-  );
-}
-
-function toOperatingHours(value: Prisma.JsonValue): CollectionPointOperatingHours[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(isOperatingHour)
-    .map(({ weekday, openTime, closeTime }) => ({ weekday, openTime, closeTime }));
-}
-
-function toJsonHours(hours: CollectionPointOperatingHours[]): Prisma.InputJsonValue {
-  return hours.map(({ weekday, openTime, closeTime }) => ({ weekday, openTime, closeTime }));
-}
 
 function toEntity(row: PointRow): CollectionPoint {
   return {
@@ -74,7 +48,7 @@ function toEntity(row: PointRow): CollectionPoint {
     placeId: row.placeId,
     whatsappContact: row.whatsappContact,
     showWhatsappContact: row.showWhatsappContact,
-    operatingHours: toOperatingHours(row.operatingHours),
+    hours: formatHours(row.hours),
     status: row.status,
     ...("rejectionReason" in row && {
       rejectionReason: row.rejectionReason,
@@ -105,10 +79,16 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
-        operatingHours: toJsonHours(data.operatingHours),
         categories: { create: data.categoryIds.map((id) => ({ category: { connect: { id } } })) },
+        hours: {
+          create: data.operatingHours.map(({ weekday, openTime, closeTime }) => ({
+            weekday,
+            openTime: toTime(openTime),
+            closeTime: toTime(closeTime),
+          })),
+        },
       },
-      include: pointWithCategories,
+      include: pointWithDetails,
     });
     return toEntity(point);
   }
@@ -127,7 +107,6 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
-        operatingHours: toJsonHours(data.operatingHours),
         categories: {
           deleteMany: {},
           create: data.categoryIds.map((categoryId) => ({
@@ -138,10 +117,8 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         rejectionReason: null,
         reviewedById: null,
         reviewedAt: null,
-        hoursConfirmedAt: new Date(),
-        isOutdated: false,
       },
-      include: pointWithCategories,
+      include: pointWithDetails,
     });
     return toEntity(point);
   }
@@ -155,7 +132,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         reviewedById: data.reviewedById,
         reviewedAt: data.reviewedAt,
       },
-      include: pointWithCategories,
+      include: pointWithDetails,
     });
     return toEntity(point);
   }
@@ -164,7 +141,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const point = await prisma.collectionPoint.findFirst({
       where: { id, status: CollectionPointStatus.APPROVED },
       omit: publicOmit,
-      include: pointWithCategories,
+      include: pointWithDetails,
     });
     return point ? toEntity(point) : null;
   }
@@ -180,7 +157,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId },
       orderBy: { updatedAt: "desc" },
-      include: pointWithCategories,
+      include: pointWithDetails,
     });
     return points.map(toEntity);
   }
@@ -188,7 +165,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
   async listPending() {
     const points = await prisma.collectionPoint.findMany({
       where: { status: CollectionPointStatus.PENDING },
-      include: { ...pointWithCategories, ...pointWithCollector },
+      include: { ...pointWithDetails, ...pointWithCollector },
       orderBy: { createdAt: "asc" },
     });
     return points.map(toEntity);

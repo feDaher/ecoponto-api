@@ -20,7 +20,15 @@ function row(overrides: Record<string, unknown> = {}) {
     placeId: null,
     whatsappContact: "33999990000",
     showWhatsappContact: true,
-    operatingHours: [{ weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" }],
+    hours: [
+      {
+        id: "hour-1",
+        weekday: "MONDAY",
+        openTime: new Date("1970-01-01T08:00:00.000Z"),
+        closeTime: new Date("1970-01-01T17:30:00.000Z"),
+        isActive: true,
+      },
+    ],
     status: "APPROVED",
     hoursConfirmedAt: new Date("2026-11-01T00:00:00Z"),
     isOutdated: false,
@@ -45,7 +53,9 @@ describe("PrismaCollectionPointRepository mapping", () => {
       latitude: "-20.258",
       longitude: "-42.0336",
       wasteCategories: ["GLASS", "PLASTIC"],
-      operatingHours: [{ weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" }],
+      hours: [
+        { id: "hour-1", weekday: "MONDAY", openTime: "08:00", closeTime: "17:30", isActive: true },
+      ],
     });
     expect(point).not.toHaveProperty("rejectionReason");
     expect(point).not.toHaveProperty("reviewedById");
@@ -77,31 +87,29 @@ describe("PrismaCollectionPointRepository mapping", () => {
     });
   });
 
-  it("drops malformed operating hours entries instead of trusting the JSON column", async () => {
-    prisma.collectionPoint.findFirst.mockResolvedValue(
-      row({
-        operatingHours: [
-          { weekday: "MONDAY", openTime: "08:00", closeTime: "17:00", extra: "ignored" },
-          { weekday: "TUESDAY" },
-          "08:00-17:00",
-          null,
-        ],
+  it("reads only the active hours from the OperatingHours table, in weekday order", async () => {
+    prisma.collectionPoint.findFirst.mockResolvedValue(row());
+
+    await repository.findApprovedById("point-1");
+
+    expect(prisma.collectionPoint.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          hours: {
+            where: { isActive: true },
+            orderBy: [{ weekday: "asc" }, { openTime: "asc" }],
+          },
+        }),
       }),
     );
-
-    const point = await repository.findApprovedById("point-1");
-
-    expect(point?.operatingHours).toEqual([
-      { weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" },
-    ]);
   });
 
-  it("returns an empty list when the hours column is not an array", async () => {
-    prisma.collectionPoint.findFirst.mockResolvedValue(row({ operatingHours: {} }));
+  it("never exposes the removed operatingHours JSON field", async () => {
+    prisma.collectionPoint.findFirst.mockResolvedValue(row());
 
     const point = await repository.findApprovedById("point-1");
 
-    expect(point?.operatingHours).toEqual([]);
+    expect(point).not.toHaveProperty("operatingHours");
   });
 
   it("reads only the fields needed for ownership and status checks", async () => {

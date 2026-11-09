@@ -12,13 +12,17 @@ const activeCategories = [
   { id: "category-glass", name: "GLASS", active: true },
 ];
 
-const pointBody = {
+const pointEditBody = {
   name: "Eco Ponto Centro",
   city: "Manhuaçu",
   address: "Rua A, 10",
   latitude: -20.258,
   longitude: -42.0336,
   wasteCategories: ["PLASTIC", "GLASS"],
+};
+
+const pointBody = {
+  ...pointEditBody,
   operatingHours: [{ weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" }],
 };
 
@@ -32,6 +36,7 @@ function pointWithCategories(names: string[]) {
     longitude: pointBody.longitude,
     showWhatsappContact: false,
     categories: names.map((name) => ({ category: { name } })),
+    hours: [],
   };
 }
 
@@ -118,7 +123,7 @@ describe("collection point category persistence", () => {
     const response = await request(app)
       .put("/collection-points/point-1")
       .set(bearer(Role.COLLECTOR))
-      .send({ ...pointBody, wasteCategories: ["GLASS"] });
+      .send({ ...pointEditBody, wasteCategories: ["GLASS"] });
 
     expect(response.status).toBe(200);
     expect(response.body.wasteCategories).toEqual(["GLASS"]);

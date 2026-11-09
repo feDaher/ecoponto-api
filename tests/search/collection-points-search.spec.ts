@@ -29,7 +29,7 @@ function point(overrides: Record<string, unknown> = {}) {
     whatsappContact: "33999990000",
     showWhatsappContact: false,
     categories: [{ category: { name: "PLASTIC" } }],
-    operatingHours: [],
+    hours: [] as { id: string; weekday: string; openTime: string; closeTime: string }[],
     status: CollectionPointStatus.APPROVED,
     hoursConfirmedAt: new Date("2026-10-01T00:00:00Z"),
     isOutdated: false,
@@ -59,9 +59,14 @@ function stubSearch({
         categories.map(({ category }) => ({ pointId: id, name: category.name })),
       );
     }
+    if (sql.sql.includes("FROM OperatingHours")) {
+      return hydrated.flatMap(({ id, hours }) => hours.map((hour) => ({ ...hour, pointId: id })));
+    }
     return ranked;
   });
-  prisma.collectionPoint.findMany.mockResolvedValue(hydrated);
+  prisma.collectionPoint.findMany.mockResolvedValue(
+    hydrated.map(({ categories: _categories, hours: _hours, ...row }) => row),
+  );
 }
 
 beforeEach(() => {
@@ -247,6 +252,33 @@ describe("GET /collection-points results", () => {
       where: { id: { in: ["point-a"] } },
       omit: { rejectionReason: true, reviewedById: true, reviewedAt: true },
     });
+  });
+
+  it("returns the active operating hours of each point as HH:mm", async () => {
+    stubSearch({
+      ranked: [{ id: "point-a", distanceKm: null }],
+      hydrated: [
+        point({
+          id: "point-a",
+          hours: [{ id: "hour-1", weekday: "MONDAY", openTime: "08:00", closeTime: "17:30" }],
+        }),
+      ],
+    });
+
+    const response = await search();
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].hours).toEqual([
+      { id: "hour-1", weekday: "MONDAY", openTime: "08:00", closeTime: "17:30", isActive: true },
+    ]);
+    expect(response.body[0]).not.toHaveProperty("operatingHours");
+    const hoursQuery = queryRaw().mock.calls.find(([sql]) =>
+      sql.sql.includes("FROM OperatingHours"),
+    )?.[0] as Prisma.Sql;
+    expect(hoursQuery.sql).toContain("WHERE isActive = TRUE AND collectionPointId IN (?)");
+    expect(hoursQuery.sql).toContain("TIME_FORMAT(openTime, '%H:%i')");
+    expect(hoursQuery.sql).toContain("ORDER BY collectionPointId, weekday, openTime");
+    expect(hoursQuery.values).toEqual(["point-a"]);
   });
 
   it("keeps the ranking order regardless of the order the rows are hydrated in", async () => {

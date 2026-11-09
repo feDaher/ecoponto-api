@@ -1,11 +1,12 @@
 import { prisma } from "../../../../config/prisma";
 import { Prisma } from "../../../../generated/prisma/client";
-import { CollectionPointStatus } from "../../../../generated/prisma/enums";
+import { CollectionPointStatus, type Weekday } from "../../../../generated/prisma/enums";
 import { boundingBox, EARTH_RADIUS_KM } from "../../../../shared/geo/distance";
 import type {
   CollectionPointSearchCriteria,
   CollectionPointSearchPage,
   ICollectionPointSearchRepository,
+  PublicOperatingHour,
   SearchedCollectionPoint,
 } from "../../domain/repositories/ICollectionPointSearchRepository";
 
@@ -19,6 +20,14 @@ interface RankedRow {
 interface CategoryLinkRow {
   pointId: string;
   name: string;
+}
+
+interface HourRow {
+  id: string;
+  pointId: string;
+  weekday: Weekday;
+  openTime: string;
+  closeTime: string;
 }
 
 interface CountRow {
@@ -81,11 +90,14 @@ export class PrismaCollectionPointSearchRepository implements ICollectionPointSe
     }
 
     const ids = ranked.map((row) => row.id);
-    const [total, rows, links] = await Promise.all([
+    const [total, rows, links, hours] = await Promise.all([
       ranked.length < limit ? ranked.length : this.countMatching(where),
       prisma.collectionPoint.findMany({ where: { id: { in: ids } }, omit: publicOmit }),
       prisma.$queryRaw<CategoryLinkRow[]>(
         Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.pointId IN (${Prisma.join(ids)})`,
+      ),
+      prisma.$queryRaw<HourRow[]>(
+        Prisma.sql`SELECT id, collectionPointId AS pointId, weekday, TIME_FORMAT(openTime, '%H:%i') AS openTime, TIME_FORMAT(closeTime, '%H:%i') AS closeTime FROM OperatingHours WHERE isActive = TRUE AND collectionPointId IN (${Prisma.join(ids)}) ORDER BY collectionPointId, weekday, openTime`,
       ),
     ]);
 
@@ -94,10 +106,22 @@ export class PrismaCollectionPointSearchRepository implements ICollectionPointSe
       categoriesByPoint.set(pointId, [...(categoriesByPoint.get(pointId) ?? []), name]);
     }
 
+    const hoursByPoint = new Map<string, PublicOperatingHour[]>();
+    for (const { id, pointId, weekday, openTime, closeTime } of hours) {
+      hoursByPoint.set(pointId, [
+        ...(hoursByPoint.get(pointId) ?? []),
+        { id, weekday, openTime, closeTime, isActive: true },
+      ]);
+    }
+
     const pointsById = new Map(
       rows.map((point) => [
         point.id,
-        { ...point, wasteCategories: (categoriesByPoint.get(point.id) ?? []).sort() },
+        {
+          ...point,
+          hours: hoursByPoint.get(point.id) ?? [],
+          wasteCategories: (categoriesByPoint.get(point.id) ?? []).sort(),
+        },
       ]),
     );
 

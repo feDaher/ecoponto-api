@@ -15,6 +15,7 @@ import { UpdateCollectionPointUseCase } from "../domain/use-cases/UpdateCollecti
 import { toPublicCollectionPoint } from "./collection-points.presenter";
 import type {
   CollectionPointInput,
+  CollectionPointUpdateInput,
   SearchCollectionPointsQuery,
 } from "./collection-points.validators";
 
@@ -85,7 +86,7 @@ export async function findApprovedById(req: Request, res: Response) {
 }
 export async function update(req: Request, res: Response) {
   const point = await updateUseCase.execute({
-    ...(req.body as CollectionPointInput),
+    ...(req.body as CollectionPointUpdateInput),
     id: pointIdFrom(req),
     requester: req.user!,
   });

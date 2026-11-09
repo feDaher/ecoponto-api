@@ -2,6 +2,7 @@ import type {
   CollectionPoint,
   CollectionPointDraft,
   CollectionPointLocationSource,
+  CollectionPointOperatingHours,
   CollectionPointStatus,
 } from "../entities/CollectionPoint";
 export interface CollectionPointWriteData extends Omit<
@@ -16,6 +17,7 @@ export interface CollectionPointWriteData extends Omit<
 }
 export interface CreateCollectionPointData extends CollectionPointWriteData {
   collectorId: string;
+  operatingHours: CollectionPointOperatingHours[];
 }
 export interface ReviewCollectionPointData {
   status: Extract<CollectionPointStatus, "APPROVED" | "REJECTED">;

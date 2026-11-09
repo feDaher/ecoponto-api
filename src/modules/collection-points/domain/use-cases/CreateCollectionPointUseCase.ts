@@ -1,9 +1,9 @@
-import type { CollectionPoint, CollectionPointDraft } from "../entities/CollectionPoint";
+import type { CollectionPoint, NewCollectionPointDraft } from "../entities/CollectionPoint";
 import type { ICollectionPointRepository } from "../repositories/ICollectionPointRepository";
 import type { IWasteCategoryRepository } from "../../../waste-categories/domain/repositories/IWasteCategoryRepository";
 import { ensureActiveWasteCategories } from "../policies/ensureActiveWasteCategories";
 import type { ICollectionPointLocationResolver } from "../gateways/ICollectionPointLocationResolver";
-export interface CreateCollectionPointInput extends CollectionPointDraft {
+export interface CreateCollectionPointInput extends NewCollectionPointDraft {
   collectorId: string;
 }
 export class CreateCollectionPointUseCase {
