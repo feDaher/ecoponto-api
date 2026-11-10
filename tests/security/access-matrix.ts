@@ -19,6 +19,11 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /citizen": [CITIZEN],
   "GET /users": [ADMIN],
 
+  // Moderação de avaliações (BE-09)
+  "GET /reviews": PUBLIC,
+  "PATCH /admin/reviews/:id/hide": [ADMIN],
+  "DELETE /admin/reviews/:id": [ADMIN],
+
   "GET /collection-points": PUBLIC,
   "GET /collection-points/:id": PUBLIC,
   "GET /collection-points/mine": [COLLECTOR],

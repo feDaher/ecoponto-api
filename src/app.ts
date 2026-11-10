@@ -19,10 +19,12 @@ import { collectorRoutes } from "./modules/collector/presentation/collector.rout
 import { citizenRoutes } from "./modules/citizen/presentation/citizen.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
 import { placesRoutes } from "./modules/places/presentation/places.routes";
+import { reviewsRoutes } from "./modules/reviews/presentation/reviews.routes";
 
 export const app = express();
 
 app.use(helmet());
+app.use(reviewsRoutes);
 app.use(cors());
 app.use(
   rateLimit({
