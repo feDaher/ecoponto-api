@@ -15,6 +15,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /auth/me": ANY_AUTHENTICATED,
 
   "GET /admin": [ADMIN],
+  "GET /admin/audit-logs": [ADMIN],
   "GET /collector": [COLLECTOR],
   "GET /citizen": [CITIZEN],
   "GET /users": [ADMIN],

@@ -6,11 +6,17 @@ import { PrismaAuditLogRepository } from "../modules/audit/infra/repositories/Pr
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const RESOURCE_ID_PARAMS = ["id", "collectionPointId", "categoryId"] as const;
 
-function resolveAction(method: string, statusCode: number): AuditAction | null {
+function resolveAction(
+  method: string,
+  statusCode: number,
+  route: string | null,
+): AuditAction | null {
   if (statusCode === 403) {
     return AuditAction.ACCESS_DENIED;
   }
-
+  if (method === "GET" && route === "/admin/audit-logs" && statusCode >= 200 && statusCode < 300) {
+    return AuditAction.AUDIT_LOG_VIEWED;
+  }
   if (MUTATING_METHODS.has(method) && statusCode < 400) {
     return AuditAction.RESOURCE_CHANGED;
   }
@@ -32,13 +38,13 @@ function resolveResourceId(params: Record<string, string | string[]> | undefined
 export function createAuditTrail(repository: IAuditLogRepository) {
   return (req: Request, res: Response, next: NextFunction) => {
     res.on("finish", () => {
-      const action = req.user ? resolveAction(req.method, res.statusCode) : null;
+      const route = req.route ? `${req.baseUrl}${req.route.path}` : null;
+
+      const action = req.user ? resolveAction(req.method, res.statusCode, route) : null;
 
       if (!req.user || !action) {
         return;
       }
-
-      const route = req.route ? `${req.baseUrl}${req.route.path}` : null;
 
       repository
         .record({
