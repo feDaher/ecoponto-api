@@ -101,3 +101,9 @@ temp/
 .env.backup
 backups/
 *.sql.gz
+
+# Credenciais locais do healthcheck MySQL
+/docker/mysql-replica/healthcheck.cnf
+
+# Configuracoes locais do Docker Compose
+/docker-compose.override.yml
