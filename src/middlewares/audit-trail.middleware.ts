@@ -6,16 +6,28 @@ import { PrismaAuditLogRepository } from "../modules/audit/infra/repositories/Pr
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const RESOURCE_ID_PARAMS = ["id", "collectionPointId", "categoryId"] as const;
 
+/**
+ * Leituras não são auditadas por padrão. Uma rota cuja leitura precisa ser registrada
+ * (ex.: consultar a própria trilha de auditoria, exigência da LGPD) declara a ação com
+ * `auditRead(...)`, que só vira registro se a resposta for 2xx.
+ */
+export function auditRead(action: AuditAction) {
+  return (_req: Request, res: Response, next: NextFunction) => {
+    res.locals.auditReadAction = action;
+    next();
+  };
+}
+
 function resolveAction(
   method: string,
   statusCode: number,
-  route: string | null,
+  readAction: AuditAction | undefined,
 ): AuditAction | null {
   if (statusCode === 403) {
     return AuditAction.ACCESS_DENIED;
   }
-  if (method === "GET" && route === "/admin/audit-logs" && statusCode >= 200 && statusCode < 300) {
-    return AuditAction.AUDIT_LOG_VIEWED;
+  if (readAction && statusCode >= 200 && statusCode < 300) {
+    return readAction;
   }
   if (MUTATING_METHODS.has(method) && statusCode < 400) {
     return AuditAction.RESOURCE_CHANGED;
@@ -38,13 +50,15 @@ function resolveResourceId(params: Record<string, string | string[]> | undefined
 export function createAuditTrail(repository: IAuditLogRepository) {
   return (req: Request, res: Response, next: NextFunction) => {
     res.on("finish", () => {
-      const route = req.route ? `${req.baseUrl}${req.route.path}` : null;
-
-      const action = req.user ? resolveAction(req.method, res.statusCode, route) : null;
+      const action = req.user
+        ? resolveAction(req.method, res.statusCode, res.locals.auditReadAction)
+        : null;
 
       if (!req.user || !action) {
         return;
       }
+
+      const route = req.route ? `${req.baseUrl}${req.route.path}` : null;
 
       repository
         .record({

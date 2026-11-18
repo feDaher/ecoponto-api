@@ -2,9 +2,11 @@ import { Router } from "express";
 import { Role } from "../../../generated/prisma/enums";
 import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { authorize } from "../../../middlewares/authorize.middleware";
+import { auditRead } from "../../../middlewares/audit-trail.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
-import { listAuditLogsQuerySchema } from "./validators/listAuditLogsValidator";
+import { AuditAction } from "../domain/entities/AuditEntry";
 import { listAuditLogs } from "./audit-logs.controller";
+import { listAuditLogsQuerySchema } from "./audit-logs.validators";
 
 export const auditLogRoutes = Router();
 
@@ -52,21 +54,22 @@ export const auditLogRoutes = Router();
  *         required: false
  *         schema:
  *           type: string
- *         description: Filter logs by route
+ *           maxLength: 191
+ *         description: Filter logs by route pattern (e.g. /collection-points/:id)
  *       - in: query
  *         name: from
  *         required: false
  *         schema:
  *           type: string
  *           format: date-time
- *         description: Start of the date range in ISO 8601
+ *         description: Start of the date range in ISO 8601 (must be sent together with `to`)
  *       - in: query
  *         name: to
  *         required: false
  *         schema:
  *           type: string
  *           format: date-time
- *         description: End of the date range in ISO 8601 (maximum 90 days)
+ *         description: End of the date range in ISO 8601 (must be sent together with `from`; maximum 90 days)
  *     responses:
  *       200:
  *         description: Paginated audit logs with items and nextCursor
@@ -82,6 +85,7 @@ auditLogRoutes.get(
   "/admin/audit-logs",
   authenticate,
   authorize(Role.ADMIN),
+  auditRead(AuditAction.AUDIT_LOG_VIEWED),
   validate(listAuditLogsQuerySchema, "query"),
   listAuditLogs,
 );

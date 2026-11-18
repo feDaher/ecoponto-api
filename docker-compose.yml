@@ -50,9 +50,10 @@ services:
     volumes:
       - ecoponto_mysql_replica_data:/var/lib/mysql
       - ./docker/mysql-replica/init:/docker-entrypoint-initdb.d:ro
-
     healthcheck:
-      # Verifica se as duas threads de replicação estão funcionando.
+      # Só fica saudável com as duas threads de replicação rodando (IO e SQL): um "ping"
+      # passaria mesmo com a replicação quebrada, e o `db:up --wait` não acusaria nada.
+      # A senha vai por MYSQL_PWD para não aparecer na linha de comando (`ps`).
       test:
         - "CMD-SHELL"
         - >-
