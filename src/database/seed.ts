@@ -65,6 +65,18 @@ async function main() {
     throw new Error("Refusing to run the seed with NODE_ENV=production");
   }
 
+  await prisma.$transaction(
+    seedWasteCategories.map(({ name, description }) =>
+      prisma.wasteCategory.upsert({
+        where: { name },
+        create: { name, description },
+        update: { description },
+      }),
+    ),
+  );
+
+  console.log(`✔ ${seedWasteCategories.length} waste categories`);
+
   for (const { name, email, phone, city, role } of seedUsers) {
     const firebaseUser = await findOrCreateFirebaseUser(email, name);
 
@@ -76,16 +88,6 @@ async function main() {
 
     console.log(`✔ ${role.padEnd(9)} ${email}`);
   }
-
-  for (const { name, description } of seedWasteCategories) {
-    await prisma.wasteCategory.upsert({
-      where: { name },
-      create: { name, description },
-      update: { description },
-    });
-  }
-
-  console.log(`✔ ${seedWasteCategories.length} waste categories`);
 
   console.log(`\nSeed concluído. Senha das contas de teste: ${SEED_PASSWORD}`);
 }

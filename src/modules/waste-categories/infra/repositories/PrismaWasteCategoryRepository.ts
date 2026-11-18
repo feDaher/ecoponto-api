@@ -18,6 +18,12 @@ export class PrismaWasteCategoryRepository implements IWasteCategoryRepository {
     return prisma.wasteCategory.findUnique({ where: { name } });
   }
 
+  findActiveByNames(names: string[]) {
+    return prisma.wasteCategory.findMany({
+      where: { name: { in: names }, active: true },
+    });
+  }
+
   findMany() {
     return prisma.wasteCategory.findMany({ where: { active: true } });
   }

@@ -94,3 +94,10 @@ temp/
 *.agents/
 *.claude/
 *.windsurf/
+
+# ===============================
+# Database backups
+# ===============================
+.env.backup
+backups/
+*.sql.gz

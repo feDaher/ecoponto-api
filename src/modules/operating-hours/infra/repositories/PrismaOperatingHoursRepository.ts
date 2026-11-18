@@ -5,14 +5,12 @@ import type {
   IOperatingHoursRepository,
   UpdateOperatingHoursData,
 } from "../../domain/repositories/IOperatingHoursRepository";
+import { fromTime, toTime } from "../../../../shared/time/time-of-day";
 
 type OperatingHoursRow = Omit<OperatingHours, "openTime" | "closeTime"> & {
   openTime: Date;
   closeTime: Date;
 };
-
-const toTime = (value: string) => new Date(`1970-01-01T${value}:00.000Z`);
-const fromTime = (value: Date) => value.toISOString().slice(11, 16);
 
 const toEntity = ({
   id,
