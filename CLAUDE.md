@@ -11,7 +11,7 @@ This repo (`ecoponto-api`) is the **backend** for **EcoPonto Digital**, a system
   - **Coletor/Cooperativa** (`COLLECTOR`): registers and manages their own collection point(s), updates hours, receives requests, logs received materials, exposes a WhatsApp contact button.
   - **Administrador** (`ADMIN`): approves/moderates collection points before they appear on the map, moderates reviews/content, manages users, publishes educational content.
 - **MVP functional scope**: georeferenced map of collection points, filters, detailed point info, route tracing, user registration/login, point credentialing+approval workflow, WhatsApp contact channel, environmental education content module, gamification (points/ranking/badges for disposals), point reviews/ratings, Google Maps integration.
-- This backend currently implements: health-check, auth/RBAC (register, login, me, per-role `/admin` `/collector` `/citizen`), the Google Places proxy (`src/modules/places/`), collection points with admin approval and public search by city/waste type/radius (`collection-points/`), waste categories CRUD (`waste-categories/`), operating hours CRUD plus the daily outdated-hours job (`operating-hours/`), and public educational content per category (`educational-content/`). `disposals/` and `reports/` (gamification, dashboards) are **not yet built**, nor are reviews, notifications or WhatsApp.
+- This backend currently implements: health-check, auth/RBAC (register, login, me, per-role `/admin` `/collector` `/citizen`), the Google Places proxy (`src/modules/places/`), collection points with admin approval and public search by city/waste type/radius (`collection-points/`), waste categories CRUD (`waste-categories/`), operating hours CRUD plus the daily outdated-hours job (`operating-hours/`), public educational content per category (`educational-content/`), and review listing + admin moderation (`reviews/`, BE-09). `disposals/` and `reports/` (gamification, dashboards) are **not yet built**, nor are review creation (`POST /collection-points/:id/reviews`), notifications or WhatsApp.
 
 ### Business rules to honor when building those modules
 
@@ -68,6 +68,10 @@ Performance rules worth keeping (measured with `load-test`, 5000 points, 100 con
 - Indexes `(status, name)`, `(status, city, name)` and `(status, latitude, longitude)` serve the ordering and range predicates; `(status, city)` was dropped as a redundant prefix.
 - Cost is proportional to the response size: throughput was ~110 req/s at `limit=200`, ~190 at 100 and ~290 at 50, hence the default of 100. Use `prisma` (primary), not `prismaRead`: this is not a report query.
 - The Haversine expression in SQL and `distanceInKm` (`src/shared/geo/distance.ts`) must stay equivalent; `boundingBox` must always be a superset of the circle.
+
+### Reviews and moderation (BE-09)
+
+`GET /collection-points/:id/reviews` is public: only reviews with `isHidden = false` of an `APPROVED` point (otherwise 404), newest first, `limit` (20, max 100) + `offset`, total in `X-Total-Count`. Items carry only `authorName` = the citizen's **first name** (LGPD minimization: no citizen id or full name in public). Moderation is ADMIN-only: `GET /admin/reviews` (`visibility=visible|hidden|all`, `collectionPointId`, same pagination; includes author id/name and point), `PATCH /admin/reviews/:id/hide` and `/unhide` (reversible, idempotent; hiding is the default moderation action) and `DELETE /admin/reviews/:id` (permanent, for content that must not be kept). Writes go through `auditTrail` as `RESOURCE_CHANGED` with the review id.
 
 ### Collection point categories and hours
 
