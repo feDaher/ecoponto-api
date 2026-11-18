@@ -22,6 +22,7 @@ import { placesRoutes } from "./modules/places/presentation/places.routes";
 import { reportsRoutes } from "./modules/reports/presentation/reports.routes";
 import { auditLogRoutes } from "./modules/audit/presentation/audit-logs.routes";
 import { reviewsRoutes } from "./modules/reviews/presentation/reviews.routes";
+import { disposalsRoutes } from "./modules/disposals/presentation/disposals.routes";
 
 export const app = express();
 
@@ -52,6 +53,7 @@ app.use(placesRoutes);
 app.use(reportsRoutes);
 app.use(auditLogRoutes);
 app.use(reviewsRoutes);
+app.use(disposalsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

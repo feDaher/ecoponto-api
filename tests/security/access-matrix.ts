@@ -30,6 +30,15 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "PATCH /admin/reviews/:id/unhide": [ADMIN],
   "DELETE /admin/reviews/:id": [ADMIN],
 
+  // Descartes / histórico de reciclagem (FE-16)
+  "POST /disposals": [CITIZEN],
+  "GET /disposals/me": [CITIZEN],
+  "GET /disposals/me/summary": [CITIZEN],
+  "GET /disposals/received": [COLLECTOR],
+  // Dono do descarte, dono do ponto ou admin; os demais recebem 404 (regra no use-case).
+  "GET /disposals/:id": ANY_AUTHENTICATED,
+  "PATCH /disposals/:id/status": [COLLECTOR, ADMIN],
+
   "GET /collection-points": PUBLIC,
   "GET /collection-points/:id": PUBLIC,
   "GET /collection-points/mine": [COLLECTOR],
