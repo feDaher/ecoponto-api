@@ -13,6 +13,10 @@ export interface CreateDisposalInput {
 }
 
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+// A disposal is logged around the time of the delivery; older dates would let points be farmed
+// for deliveries nobody can check anymore.
+export const MAX_BACKDATE_DAYS = 30;
+const MAX_BACKDATE_MS = MAX_BACKDATE_DAYS * 24 * 60 * 60 * 1000;
 
 export class CreateDisposalUseCase {
   constructor(
@@ -28,6 +32,19 @@ export class CreateDisposalUseCase {
       throw new AppError("Disposal date cannot be in the future", 400);
     }
 
+    if (disposedAt.getTime() < now - MAX_BACKDATE_MS) {
+      throw new AppError(
+        `Disposal date cannot be more than ${MAX_BACKDATE_DAYS} days in the past`,
+        400,
+      );
+    }
+
+    const weightKg = roundWeight(input.weightKg);
+
+    if (weightKg <= 0) {
+      throw new AppError("Weight must be greater than zero", 400);
+    }
+
     const point = await this.disposalRepository.findPoint(input.collectionPointId);
 
     // A point that is not approved is invisible on the map, so it does not exist for citizens.
@@ -41,16 +58,10 @@ export class CreateDisposalUseCase {
       throw new AppError("Waste category not found", 404);
     }
 
-    const accepted = await this.disposalRepository.pointAcceptsCategory(point.id, category.name);
+    const accepted = await this.disposalRepository.pointAcceptsCategory(point.id, category.id);
 
     if (!accepted) {
       throw new AppError("This collection point does not accept this waste category", 422);
-    }
-
-    const weightKg = roundWeight(input.weightKg);
-
-    if (weightKg <= 0) {
-      throw new AppError("Weight must be greater than zero", 400);
     }
 
     // Starts PENDING with 0 points: points only exist once the collector confirms the delivery.

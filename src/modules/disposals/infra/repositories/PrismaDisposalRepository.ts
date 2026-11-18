@@ -44,21 +44,15 @@ export class PrismaDisposalRepository implements IDisposalRepository {
     });
   }
 
-  // The accepted categories still live in two places (see CLAUDE.md): the JSON column used by the
-  // public search and the normalized PointCategory table. Accept a match in either one.
-  async pointAcceptsCategory(pointId: string, categoryName: string) {
-    const [link, jsonMatch] = await Promise.all([
-      prisma.pointCategory.findFirst({
-        where: { pointId, category: { name: categoryName } },
-        select: { pointId: true },
-      }),
-      prisma.collectionPoint.findFirst({
-        where: { id: pointId, wasteCategories: { array_contains: [categoryName] } },
-        select: { id: true },
-      }),
-    ]);
+  // Since BE-16 the accepted categories live only in PointCategory (the JSON column is gone).
+  // Same rule as the public search: only an active category counts.
+  async pointAcceptsCategory(pointId: string, categoryId: string) {
+    const link = await prisma.pointCategory.findFirst({
+      where: { pointId, categoryId, category: { active: true } },
+      select: { pointId: true },
+    });
 
-    return Boolean(link || jsonMatch);
+    return link !== null;
   }
 
   async create(data: CreateDisposalData) {

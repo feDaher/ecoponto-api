@@ -52,7 +52,7 @@ export const disposalsRoutes = Router();
  *               disposedAt:
  *                 type: string
  *                 format: date-time
- *                 description: Defaults to now. Cannot be in the future.
+ *                 description: Defaults to now. Cannot be in the future nor more than 30 days in the past.
  *     responses:
  *       201:
  *         description: Disposal logged (PENDING)

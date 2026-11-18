@@ -28,7 +28,7 @@ export interface ListDisposalsParams {
 
 export interface IDisposalRepository {
   findPoint(id: string): Promise<DisposalPoint | null>;
-  pointAcceptsCategory(pointId: string, categoryName: string): Promise<boolean>;
+  pointAcceptsCategory(pointId: string, categoryId: string): Promise<boolean>;
   create(data: CreateDisposalData): Promise<Disposal>;
   findById(id: string): Promise<Disposal | null>;
   findMany(params: ListDisposalsParams): Promise<Paginated<Disposal>>;
