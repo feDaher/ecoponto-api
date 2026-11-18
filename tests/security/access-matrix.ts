@@ -9,6 +9,7 @@ const { ADMIN, COLLECTOR, CITIZEN } = Role;
 
 export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /health": PUBLIC,
+  "GET /health/ready": PUBLIC,
 
   "POST /auth/register": PUBLIC,
   "POST /auth/login": PUBLIC,

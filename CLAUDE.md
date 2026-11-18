@@ -91,7 +91,15 @@ Collection point categories are normalized through `PointCategory`, linked to ac
 
 ### Request pipeline (`src/app.ts`)
 
-Middleware order matters: `helmet` → `cors` → `express-rate-limit` (`RATE_LIMIT_MAX` req/15min per IP, default 100) → `express.json()` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
+Middleware order matters: `helmet` → `cors` → `express-rate-limit` (`RATE_LIMIT_MAX` req/15min per IP, default 100) → `express.json()` → `auditTrail` → `/docs` (Swagger UI) → feature routes → `notFound` → `errorHandler` (must stay last).
+
+Deploy hardening (all opt-in or invisible to the apps):
+
+- `TRUST_PROXY` (env) feeds `app.set("trust proxy")`. Unset → off (local). Behind a reverse proxy it **must** be set (hop count, usually `1`, or proxy IPs/subnets), otherwise every limiter sees the proxy's IP and throttles all users together. `"true"` is rejected at boot (clients could spoof `X-Forwarded-For`).
+- `CORS_ORIGINS` (env, comma separated) restricts browser origins; unset → `*` (fine with Bearer auth, no cookies). Native mobile apps are unaffected by CORS.
+- `errorHandler` turns body-parser errors (`expose: true`, 4xx) into their status with a fixed message: malformed JSON → 400, body > 100 KB → 413. Everything else that isn't an `AppError` stays a generic 500.
+- `GET /health` is liveness (no DB). `GET /health/ready` runs `SELECT 1` (3 s timeout) → 200 or 503; use it for the platform's readiness/health probe. Both are skipped by the global rate limiter.
+- `server.ts` handles `SIGTERM`/`SIGINT` via `createShutdownHandler` (`src/shared/lifecycle/graceful-shutdown.ts`): stop the cron job, `server.close()` (in-flight requests finish), `$disconnect` the Prisma clients, exit; forced exit 1 after 10 s.
 
 Route handlers are plain async functions — **do not wrap them in a try/catch-to-next helper**. Express 5's router natively forwards rejected promises to the error middleware (verified in `node_modules/router/lib/layer.js`), so throwing an `AppError` (`src/shared/errors/AppError.ts`) from anywhere in a request, sync or async, reaches `errorHandler` automatically.
 

@@ -26,12 +26,18 @@ import { disposalsRoutes } from "./modules/disposals/presentation/disposals.rout
 
 export const app = express();
 
+// Off unless TRUST_PROXY is set: behind a reverse proxy, req.ip (and so every rate limiter)
+// would otherwise see the proxy's IP and throttle all users together.
+app.set("trust proxy", env.TRUST_PROXY);
+
 app.use(helmet());
-app.use(cors({ exposedHeaders: ["X-Total-Count"] }));
+app.use(cors({ origin: env.CORS_ORIGINS ?? "*", exposedHeaders: ["X-Total-Count"] }));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: env.RATE_LIMIT_MAX,
+    // Platform health probes must never be throttled into a false "down".
+    skip: (req) => req.path === "/health" || req.path === "/health/ready",
   }),
 );
 app.use(express.json());
