@@ -101,3 +101,6 @@ temp/
 .env.backup
 backups/
 *.sql.gz
+
+# Configuracoes locais do Docker Compose
+/docker-compose.override.yml

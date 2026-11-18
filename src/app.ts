@@ -20,6 +20,7 @@ import { citizenRoutes } from "./modules/citizen/presentation/citizen.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
 import { placesRoutes } from "./modules/places/presentation/places.routes";
 import { reportsRoutes } from "./modules/reports/presentation/reports.routes";
+import { auditLogRoutes } from "./modules/audit/presentation/audit-logs.routes";
 
 export const app = express();
 
@@ -48,6 +49,7 @@ app.use(citizenRoutes);
 app.use(collectionPointsRoutes);
 app.use(placesRoutes);
 app.use(reportsRoutes);
+app.use(auditLogRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
