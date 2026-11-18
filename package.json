@@ -46,7 +46,7 @@
   "type": "commonjs",
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@prisma/client": "^7.10.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
