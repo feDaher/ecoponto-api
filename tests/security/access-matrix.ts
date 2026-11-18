@@ -22,9 +22,11 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "PATCH /users/:id/unblock": [ADMIN],
   "PATCH /users/:id/role": [ADMIN],
 
-  // Moderação de avaliações (BE-09)
-  "GET /reviews": PUBLIC,
+  // Avaliações: ficha pública do ponto + moderação (BE-09)
+  "GET /collection-points/:id/reviews": PUBLIC,
+  "GET /admin/reviews": [ADMIN],
   "PATCH /admin/reviews/:id/hide": [ADMIN],
+  "PATCH /admin/reviews/:id/unhide": [ADMIN],
   "DELETE /admin/reviews/:id": [ADMIN],
 
   "GET /collection-points": PUBLIC,
