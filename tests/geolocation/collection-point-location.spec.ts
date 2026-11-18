@@ -19,11 +19,15 @@ import { prisma, resetPrismaMock } from "../support/prisma-mock";
 
 const MANHUACU = { latitude: -20.258, longitude: -42.0336 };
 
-const basePoint = {
+const editPoint = {
   name: "Eco Ponto Centro",
   city: "Manhuaçu",
   address: "Rua A, 10",
   wasteCategories: ["PLASTIC"],
+};
+
+const basePoint = {
+  ...editPoint,
   operatingHours: [{ weekday: "MONDAY", openTime: "08:00", closeTime: "17:00" }],
 };
 
@@ -34,9 +38,14 @@ beforeEach(() => {
   resetPrismaMock();
   installIdentities();
   mockGetDetails.mockReset();
+  prisma.wasteCategory.findMany.mockResolvedValue([
+    { id: "category-plastic", name: "PLASTIC", active: true },
+  ]);
   prisma.collectionPoint.create.mockImplementation(async ({ data }) => ({
     id: "point-1",
     ...data,
+    categories: [{ category: { name: "PLASTIC" } }],
+    hours: [],
   }));
 });
 
@@ -78,6 +87,10 @@ describe("POST /collection-points location validation (RN04)", () => {
         placeId: null,
         collectorId: users[Role.COLLECTOR].id,
       }),
+      include: {
+        categories: { include: { category: { select: { name: true } } } },
+        hours: { where: { isActive: true }, orderBy: [{ weekday: "asc" }, { openTime: "asc" }] },
+      },
     });
     expect(mockGetDetails).not.toHaveBeenCalled();
   });
@@ -94,6 +107,10 @@ describe("POST /collection-points location validation (RN04)", () => {
         locationSource: LocationSource.VERIFIED_ADDRESS,
         placeId: "ChIJ_place",
       }),
+      include: {
+        categories: { include: { category: { select: { name: true } } } },
+        hours: { where: { isActive: true }, orderBy: [{ weekday: "asc" }, { openTime: "asc" }] },
+      },
     });
   });
 
@@ -144,7 +161,7 @@ describe("PUT /collection-points/:id location validation", () => {
     const response = await request(app)
       .put("/collection-points/point-1")
       .set(bearer(Role.COLLECTOR))
-      .send({ ...basePoint, latitude: 0, longitude: 0 });
+      .send({ ...editPoint, latitude: 0, longitude: 0 });
 
     expect(response.status).toBe(422);
     expect(prisma.collectionPoint.update).not.toHaveBeenCalled();
@@ -156,7 +173,7 @@ describe("PUT /collection-points/:id location validation", () => {
     const response = await request(app)
       .put("/collection-points/point-1")
       .set(bearer(Role.COLLECTOR))
-      .send({ ...basePoint, placeId: "ChIJ_place" });
+      .send({ ...editPoint, placeId: "ChIJ_place" });
 
     expect(response.status).toBe(403);
     expect(mockGetDetails).not.toHaveBeenCalled();

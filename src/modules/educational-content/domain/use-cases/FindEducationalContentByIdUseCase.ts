@@ -4,10 +4,11 @@ import type { IEducationalContentRepository } from "../repositories/IEducational
 export class FindEducationalContentByIdUseCase {
   constructor(private readonly educationalContentRepository: IEducationalContentRepository) {}
   async execute(id: string) {
-    const content = await this.educationalContentRepository.findById(id);
+    const content = await this.educationalContentRepository.findPublishedById(id);
     if (!content) {
       throw new AppError("Content not found", 404);
     }
-    return content;
+    await this.educationalContentRepository.incrementViews(id);
+    return { ...content, viewCount: content.viewCount + 1 };
   }
 }

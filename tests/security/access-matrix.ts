@@ -15,9 +15,20 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /auth/me": ANY_AUTHENTICATED,
 
   "GET /admin": [ADMIN],
+  "GET /admin/audit-logs": [ADMIN],
   "GET /collector": [COLLECTOR],
   "GET /citizen": [CITIZEN],
   "GET /users": [ADMIN],
+  "PATCH /users/:id/block": [ADMIN],
+  "PATCH /users/:id/unblock": [ADMIN],
+  "PATCH /users/:id/role": [ADMIN],
+
+  // Avaliações: ficha pública do ponto + moderação (BE-09)
+  "GET /collection-points/:id/reviews": PUBLIC,
+  "GET /admin/reviews": [ADMIN],
+  "PATCH /admin/reviews/:id/hide": [ADMIN],
+  "PATCH /admin/reviews/:id/unhide": [ADMIN],
+  "DELETE /admin/reviews/:id": [ADMIN],
 
   "GET /collection-points": PUBLIC,
   "GET /collection-points/:id": PUBLIC,
@@ -38,14 +49,25 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "DELETE /waste-categories/:id": [ADMIN],
 
   "GET /educational-content": PUBLIC,
+  "GET /educational-content/featured": PUBLIC,
   "GET /educational-content/category/:categoryId": PUBLIC,
   "GET /educational-content/:id": PUBLIC,
   "POST /educational-content": [ADMIN],
   "PATCH /educational-content/:id": [ADMIN],
   "DELETE /educational-content/:id": [ADMIN],
+  "GET /admin/educational-content": [ADMIN],
+  "GET /admin/educational-content/stats": [ADMIN],
+  "GET /admin/educational-content/:id": [ADMIN],
 
   "GET /places/autocomplete": PUBLIC,
   "GET /places/:placeId": PUBLIC,
+
+  "GET /reports/summary": [ADMIN, COLLECTOR],
+  "GET /reports/by-category": [ADMIN, COLLECTOR],
+  "GET /reports/by-point": [ADMIN, COLLECTOR],
+  "GET /reports/manifests": [ADMIN, COLLECTOR],
+  "GET /reports/filter-options": [ADMIN, COLLECTOR],
+  "GET /reports/export": [ADMIN, COLLECTOR],
 };
 
 export const PUBLIC_WRITE_ALLOWLIST = new Set(["POST /auth/register", "POST /auth/login"]);
