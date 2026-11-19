@@ -1,7 +1,10 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
+import { Role } from "../../../generated/prisma/enums";
+import { authenticate } from "../../../middlewares/authenticate.middleware";
+import { authorize } from "../../../middlewares/authorize.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
-import { autocomplete, details } from "./places.controller";
+import { autocomplete, details, usage } from "./places.controller";
 import {
   autocompleteQuerySchema,
   placeDetailsParamsSchema,
@@ -61,7 +64,7 @@ function placesLimiter(limit: number) {
  *       429:
  *         description: Too many requests
  *       503:
- *         description: Address search unavailable
+ *         description: Address search unavailable or daily limit reached
  */
 placesRoutes.get(
   "/places/autocomplete",
@@ -69,6 +72,41 @@ placesRoutes.get(
   validate(autocompleteQuerySchema, "query"),
   autocomplete,
 );
+
+/**
+ * @openapi
+ * /places/usage:
+ *   get:
+ *     summary: Today's Google Places usage against the daily limits (admin)
+ *     tags: [Places]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Usage per SKU for the current day (America/Sao_Paulo)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 day: { type: string, example: '2026-10-21' }
+ *                 timeZone: { type: string, example: 'America/Sao_Paulo' }
+ *                 usage:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       sku: { type: string, enum: [AUTOCOMPLETE, PLACE_DETAILS] }
+ *                       used: { type: integer }
+ *                       limit: { type: integer }
+ *                       remaining: { type: integer }
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not an admin
+ */
+// Declared before /places/:placeId, otherwise "usage" would be taken as a place id.
+placesRoutes.get("/places/usage", authenticate, authorize(Role.ADMIN), usage);
 
 /**
  * @openapi
@@ -115,7 +153,7 @@ placesRoutes.get(
  *       429:
  *         description: Too many requests
  *       503:
- *         description: Address search unavailable
+ *         description: Address search unavailable or daily limit reached
  */
 placesRoutes.get(
   "/places/:placeId",
