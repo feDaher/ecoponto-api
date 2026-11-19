@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { DeleteReviewUseCase } from "../domain/use-cases/DeleteReviewUseCase";
 import { ListCollectionPointReviewsUseCase } from "../domain/use-cases/ListCollectionPointReviewsUseCase";
 import { ListReviewsForModerationUseCase } from "../domain/use-cases/ListReviewsForModerationUseCase";
+import { PublishReviewUseCase } from "../domain/use-cases/PublishReviewUseCase";
 import { SetReviewVisibilityUseCase } from "../domain/use-cases/SetReviewVisibilityUseCase";
 import { PrismaReviewRepository } from "../infra/repositories/PrismaReviewRepository";
 import type {
@@ -14,6 +15,19 @@ const listCollectionPointReviewsUseCase = new ListCollectionPointReviewsUseCase(
 const listReviewsForModerationUseCase = new ListReviewsForModerationUseCase(reviewRepository);
 const setReviewVisibilityUseCase = new SetReviewVisibilityUseCase(reviewRepository);
 const deleteReviewUseCase = new DeleteReviewUseCase(reviewRepository);
+const publishReviewUseCase = new PublishReviewUseCase(reviewRepository);
+
+export async function publishReview(req: Request, res: Response) {
+  // O autor é sempre o usuário do token: um citizenId enviado pelo cliente nunca é aceito.
+  const { review, created } = await publishReviewUseCase.execute({
+    citizenId: req.user!.id,
+    collectionPointId: String(req.params.id),
+    rating: req.body.rating,
+    comment: req.body.comment,
+  });
+
+  res.status(created ? 201 : 200).json(review);
+}
 
 export async function listCollectionPointReviews(req: Request, res: Response) {
   const { limit, offset } = req.query as unknown as ListCollectionPointReviewsQuery;

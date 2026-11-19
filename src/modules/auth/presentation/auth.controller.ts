@@ -2,13 +2,16 @@ import type { Request, Response } from "express";
 import { firebaseAuth } from "../../../config/firebase";
 import { AppError } from "../../../shared/errors/AppError";
 import { LoginUserUseCase } from "../domain/use-cases/LoginUserUseCase";
+import { RefreshSessionUseCase } from "../domain/use-cases/RefreshSessionUseCase";
 import { RegisterUserUseCase } from "../domain/use-cases/RegisterUserUseCase";
 import { FirebaseAuthRestClient } from "../infra/http/FirebaseAuthRestClient";
 import { PrismaUserRepository } from "../infra/repositories/PrismaUserRepository";
 
 const userRepository = new PrismaUserRepository();
+const firebaseAuthRestClient = new FirebaseAuthRestClient();
 const registerUserUseCase = new RegisterUserUseCase(userRepository, firebaseAuth);
-const loginUserUseCase = new LoginUserUseCase(userRepository, new FirebaseAuthRestClient());
+const loginUserUseCase = new LoginUserUseCase(userRepository, firebaseAuthRestClient);
+const refreshSessionUseCase = new RefreshSessionUseCase(userRepository, firebaseAuthRestClient);
 
 export async function register(req: Request, res: Response) {
   const user = await registerUserUseCase.execute(req.body);
@@ -17,6 +20,11 @@ export async function register(req: Request, res: Response) {
 
 export async function login(req: Request, res: Response) {
   const result = await loginUserUseCase.execute(req.body);
+  res.status(200).json(result);
+}
+
+export async function refresh(req: Request, res: Response) {
+  const result = await refreshSessionUseCase.execute(req.body);
   res.status(200).json(result);
 }
 

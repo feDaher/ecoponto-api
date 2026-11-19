@@ -2,8 +2,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { authenticate } from "../../../middlewares/authenticate.middleware";
 import { validate } from "../../../middlewares/validate.middleware";
-import { login, me, register } from "./auth.controller";
-import { loginSchema, registerSchema } from "./auth.validators";
+import { login, me, refresh, register } from "./auth.controller";
+import { loginSchema, refreshSchema, registerSchema } from "./auth.validators";
 
 export const authRoutes = Router();
 
@@ -89,6 +89,41 @@ authRoutes.post("/auth/register", authLimiter(10), validate(registerSchema), reg
  *         description: Firebase unreachable or timed out
  */
 authRoutes.post("/auth/login", authLimiter(20), validate(loginSchema), login);
+
+/**
+ * @openapi
+ * /auth/refresh:
+ *   post:
+ *     summary: Exchange a refresh token for a new ID token (ID tokens expire after one hour)
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: New idToken, refreshToken and expiresIn (seconds)
+ *       400:
+ *         description: Invalid body
+ *       401:
+ *         description: Refresh token expired or revoked, or user not registered — log in again
+ *       403:
+ *         description: User account is blocked
+ *       429:
+ *         description: Too many attempts from this IP
+ *       502:
+ *         description: Firebase answered with an unexpected error
+ *       503:
+ *         description: Firebase unreachable or timed out
+ */
+// Higher limit than login: every signed-in app renews once an hour, and a classroom shares one IP.
+authRoutes.post("/auth/refresh", authLimiter(60), validate(refreshSchema), refresh);
 
 /**
  * @openapi

@@ -8,12 +8,14 @@ import {
   hideReview,
   listCollectionPointReviews,
   listReviewsForModeration,
+  publishReview,
   unhideReview,
 } from "./reviews.controller";
 import {
   collectionPointIdParamsSchema,
   listCollectionPointReviewsQuerySchema,
   listReviewsForModerationQuerySchema,
+  publishReviewSchema,
   reviewIdParamsSchema,
 } from "./reviews.validators";
 
@@ -85,6 +87,59 @@ reviewsRoutes.get(
   validate(collectionPointIdParamsSchema, "params"),
   validate(listCollectionPointReviewsQuerySchema, "query"),
   listCollectionPointReviews,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/reviews:
+ *   post:
+ *     summary: Rate an approved collection point (Citizen only)
+ *     description: >
+ *       One review per citizen per point (RB12): posting again replaces the rating and the
+ *       comment of the previous one (200) instead of creating another (201). A hidden review
+ *       stays hidden when edited.
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating: { type: integer, minimum: 1, maximum: 5 }
+ *               comment: { type: string, maxLength: 500, nullable: true }
+ *     responses:
+ *       201:
+ *         description: Review created
+ *         content:
+ *           application/json:
+ *             schema: { $ref: "#/components/schemas/PublicReview" }
+ *       200:
+ *         description: The citizen's previous review of this point was updated
+ *         content:
+ *           application/json:
+ *             schema: { $ref: "#/components/schemas/PublicReview" }
+ *       400:
+ *         description: Invalid id or body
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Authenticated user is not a Citizen
+ *       404:
+ *         description: Collection point not found or not approved
+ */
+reviewsRoutes.post(
+  "/collection-points/:id/reviews",
+  authenticate,
+  authorize(Role.CITIZEN),
+  validate(collectionPointIdParamsSchema, "params"),
+  validate(publishReviewSchema),
+  publishReview,
 );
 
 /**
