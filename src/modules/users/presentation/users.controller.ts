@@ -7,6 +7,9 @@ import { UnblockUserUseCase } from "../domain/use-cases/UnblockUserUseCase";
 import { UpdateUserRoleUseCase } from "../domain/use-cases/UpdateUserRoleUseCase";
 import type { Role } from "../../../generated/prisma/enums";
 import { ListUsersUseCase } from "../domain/use-cases/ListUsersUseCase";
+import { UpdateOwnProfileUseCase } from "../domain/use-cases/UpdateOwnProfileUseCase";
+import { DeleteOwnAccountUseCase } from "../domain/use-cases/DeleteOwnAccountUseCase";
+import type { UpdateOwnProfileInput } from "./validators/UpdateOwnProfileValidator";
 
 const userRepository = new PrismaUserRepository();
 const firebaseUserManager = new FirebaseUserManager();
@@ -18,6 +21,10 @@ const unblockUserUseCase = new UnblockUserUseCase(userRepository, firebaseUserMa
 const updateUserRoleUseCase = new UpdateUserRoleUseCase(userRepository);
 
 const listUsersUseCase = new ListUsersUseCase(userRepository);
+
+const updateOwnProfileUseCase = new UpdateOwnProfileUseCase(userRepository);
+
+const deleteOwnAccountUseCase = new DeleteOwnAccountUseCase(userRepository, firebaseUserManager);
 
 export async function blockUser(req: Request<{ id: string }>, res: Response) {
   if (!req.user) {
@@ -86,4 +93,27 @@ export async function listUsers(req: Request, res: Response) {
   }));
 
   res.status(200).json(formattedUsers);
+}
+
+export async function updateOwnProfile(
+  req: Request<unknown, unknown, UpdateOwnProfileInput>,
+  res: Response,
+) {
+  if (!req.user) {
+    throw new AppError("Authentication required", 401);
+  }
+
+  const user = await updateOwnProfileUseCase.execute(req.user.id, req.body);
+
+  res.status(200).json(user);
+}
+
+export async function deleteOwnAccount(req: Request, res: Response) {
+  if (!req.user) {
+    throw new AppError("Authentication required", 401);
+  }
+
+  await deleteOwnAccountUseCase.execute(req.user.id);
+
+  res.status(204).end();
 }
