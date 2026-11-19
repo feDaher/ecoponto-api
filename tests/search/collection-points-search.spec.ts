@@ -382,6 +382,9 @@ describe("GET /collection-points results", () => {
 
     expect(response.status).toBe(200);
     expect(response.body[0].latitude).toBe("-20.25900000");
+    expect(response.body[0].googleMapsUrl).toBe(
+      "https://www.google.com/maps/dir/?api=1&destination=-20.259%2C-42.0336&travelmode=driving",
+    );
   });
 
   it("hides the WhatsApp number unless the collector opted in", async () => {
