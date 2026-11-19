@@ -2,6 +2,7 @@ import type { UserRecord } from "firebase-admin/auth";
 import { firebaseAuth } from "../config/firebase";
 import { prisma } from "../config/prisma";
 import { Role } from "../generated/prisma/enums";
+import { seedDemoData } from "./seed-demo";
 
 const SEED_PASSWORD = "Ecoponto@123";
 
@@ -77,17 +78,26 @@ async function main() {
 
   console.log(`✔ ${seedWasteCategories.length} waste categories`);
 
+  const accountIds = new Map<Role, string>();
+
   for (const { name, email, phone, city, role } of seedUsers) {
     const firebaseUser = await findOrCreateFirebaseUser(email, name);
 
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
       where: { email },
       create: { firebaseUid: firebaseUser.uid, name, email, phone, city, role },
       update: { firebaseUid: firebaseUser.uid, name, phone, city, role },
     });
+    accountIds.set(role, user.id);
 
     console.log(`✔ ${role.padEnd(9)} ${email}`);
   }
+
+  await seedDemoData({
+    adminId: accountIds.get(Role.ADMIN)!,
+    collectorId: accountIds.get(Role.COLLECTOR)!,
+    citizenId: accountIds.get(Role.CITIZEN)!,
+  });
 
   console.log(`\nSeed concluído. Senha das contas de teste: ${SEED_PASSWORD}`);
 }

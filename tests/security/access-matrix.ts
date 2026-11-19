@@ -13,6 +13,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
 
   "POST /auth/register": PUBLIC,
   "POST /auth/login": PUBLIC,
+  "POST /auth/refresh": PUBLIC,
   "GET /auth/me": ANY_AUTHENTICATED,
 
   "GET /admin": [ADMIN],
@@ -28,6 +29,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
 
   // Avaliações: ficha pública do ponto + moderação (BE-09)
   "GET /collection-points/:id/reviews": PUBLIC,
+  "POST /collection-points/:id/reviews": [CITIZEN],
   "GET /admin/reviews": [ADMIN],
   "PATCH /admin/reviews/:id/hide": [ADMIN],
   "PATCH /admin/reviews/:id/unhide": [ADMIN],
@@ -41,6 +43,10 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   // Dono do descarte, dono do ponto ou admin; os demais recebem 404 (regra no use-case).
   "GET /disposals/:id": ANY_AUTHENTICATED,
   "PATCH /disposals/:id/status": [COLLECTOR, ADMIN],
+
+  // Ranking da gamificação (RB09): público sem ids; a posição própria exige login
+  "GET /ranking": PUBLIC,
+  "GET /ranking/me": [CITIZEN],
 
   "GET /collection-points": PUBLIC,
   "GET /collection-points/:id": PUBLIC,
@@ -83,4 +89,8 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /reports/export": [ADMIN, COLLECTOR],
 };
 
-export const PUBLIC_WRITE_ALLOWLIST = new Set(["POST /auth/register", "POST /auth/login"]);
+export const PUBLIC_WRITE_ALLOWLIST = new Set([
+  "POST /auth/register",
+  "POST /auth/login",
+  "POST /auth/refresh",
+]);

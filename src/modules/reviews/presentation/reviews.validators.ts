@@ -16,6 +16,17 @@ const pagination = {
 
 export const listCollectionPointReviewsQuerySchema = z.strictObject(pagination);
 
+// Comentário em branco vira null: a avaliação pode ser só a nota.
+export const publishReviewSchema = z.strictObject({
+  rating: z.number().int().min(1).max(5),
+  comment: z
+    .string()
+    .trim()
+    .max(500)
+    .nullish()
+    .transform((value) => value || null),
+});
+
 export const listReviewsForModerationQuerySchema = z.strictObject({
   ...pagination,
   visibility: z

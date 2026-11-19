@@ -7,6 +7,14 @@ export interface PublicReview {
   createdAt: Date;
 }
 
+/** Avaliação escrita por um cidadão (RB12). `comment` é null quando só a nota foi dada. */
+export interface NewReview {
+  citizenId: string;
+  collectionPointId: string;
+  rating: number;
+  comment: string | null;
+}
+
 /** Avaliação como o admin vê na moderação (inclui as ocultas). */
 export interface ModerationReview {
   id: string;

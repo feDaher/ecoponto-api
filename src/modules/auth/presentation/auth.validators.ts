@@ -20,3 +20,8 @@ export const loginSchema = z.object({
   email,
   password: z.string().min(6).max(128),
 });
+
+// Firebase refresh tokens are opaque strings of a few hundred chars; the cap only stops abuse.
+export const refreshSchema = z.strictObject({
+  refreshToken: z.string().trim().min(1).max(4096),
+});

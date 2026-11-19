@@ -5,6 +5,7 @@ import {
   ReviewVisibility,
   toPublicAuthorName,
   type ModerationReview,
+  type NewReview,
   type Page,
   type PageRequest,
   type PublicReview,
@@ -31,6 +32,20 @@ function toModerationReview({ citizen, ...row }: ModerationRow): ModerationRevie
   return { ...row, author: citizen };
 }
 
+const publicSelect = {
+  id: true,
+  rating: true,
+  comment: true,
+  createdAt: true,
+  citizen: { select: { name: true } },
+} satisfies Prisma.ReviewSelect;
+
+type PublicRow = Prisma.ReviewGetPayload<{ select: typeof publicSelect }>;
+
+function toPublicReview({ citizen, ...row }: PublicRow): PublicReview {
+  return { ...row, authorName: toPublicAuthorName(citizen.name) };
+}
+
 export class PrismaReviewRepository implements IReviewRepository {
   async isCollectionPointPublic(collectionPointId: string) {
     const point = await prisma.collectionPoint.findFirst({
@@ -52,24 +67,39 @@ export class PrismaReviewRepository implements IReviewRepository {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit,
         skip: offset,
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          createdAt: true,
-          citizen: { select: { name: true } },
-        },
+        select: publicSelect,
       }),
       prisma.review.count({ where }),
     ]);
 
-    return {
-      items: rows.map(({ citizen, ...row }) => ({
-        ...row,
-        authorName: toPublicAuthorName(citizen.name),
-      })),
-      total,
-    };
+    return { items: rows.map(toPublicReview), total };
+  }
+
+  async findOwnReviewId(citizenId: string, collectionPointId: string) {
+    const review = await prisma.review.findFirst({
+      where: { citizenId, collectionPointId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    return review?.id ?? null;
+  }
+
+  async create({ citizenId, collectionPointId, rating, comment }: NewReview) {
+    const row = await prisma.review.create({
+      data: { citizenId, collectionPointId, rating, comment },
+      select: publicSelect,
+    });
+    return toPublicReview(row);
+  }
+
+  async updateContent(id: string, { rating, comment }: Pick<NewReview, "rating" | "comment">) {
+    // `isHidden` fica como está: editar uma avaliação oculta não pode desfazer a moderação.
+    const row = await prisma.review.update({
+      where: { id },
+      data: { rating, comment },
+      select: publicSelect,
+    });
+    return toPublicReview(row);
   }
 
   async findForModeration(
