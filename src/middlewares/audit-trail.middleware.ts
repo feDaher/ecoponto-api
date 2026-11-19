@@ -18,6 +18,11 @@ export function auditRead(action: AuditAction) {
   };
 }
 
+export function auditSelf(req: Request, res: Response, next: NextFunction) {
+  res.locals.auditResourceId = req.user?.id;
+  next();
+}
+
 function resolveAction(
   method: string,
   statusCode: number,
@@ -66,7 +71,7 @@ export function createAuditTrail(repository: IAuditLogRepository) {
           action,
           method: req.method,
           route,
-          resourceId: resolveResourceId(res.locals.requestParams),
+          resourceId: res.locals.auditResourceId ?? resolveResourceId(res.locals.requestParams),
           statusCode: res.statusCode,
         })
         .catch((error: unknown) => {

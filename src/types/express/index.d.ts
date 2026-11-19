@@ -13,6 +13,7 @@ declare global {
 
     interface Locals {
       requestParams?: Record<string, string | string[]>;
+      auditResourceId?: string;
     }
   }
 }

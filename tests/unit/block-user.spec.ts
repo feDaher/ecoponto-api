@@ -2,6 +2,10 @@ import { BlockUserUseCase } from "../../src/modules/users/domain/use-cases/Block
 import type {
   IUserRepository,
   CreateUserData,
+  UpdateProfileData,
+  AnonymizedUserData,
+  AnonymizeOptions,
+  AnonymizeResult,
 } from "../../src/modules/auth/domain/repositories/IUserRepository";
 import type { IFirebaseUserManager } from "../../src/modules/auth/domain/repositories/IFirebaseUserManager";
 import type { User } from "../../src/modules/auth/domain/entities/User";
@@ -36,10 +40,21 @@ describe("BlockUserUseCase", () => {
       }),
 
       updateRole: jest.fn(async (_id: string, _role: Role) => user),
+
+      updateProfile: jest.fn(async (_id: string, _data: UpdateProfileData) => user),
+
+      anonymize: jest.fn(
+        async (
+          _id: string,
+          _data: AnonymizedUserData,
+          _options: AnonymizeOptions,
+        ): Promise<AnonymizeResult> => "ANONYMIZED",
+      ),
     } satisfies IUserRepository;
 
     const firebaseUserManager = {
       setDisabled: jest.fn(async (_firebaseUid: string, _disabled: boolean) => {}),
+      deleteUser: jest.fn(async (_firebaseUid: string) => {}),
     } satisfies IFirebaseUserManager;
 
     const useCase = new BlockUserUseCase(userRepository, firebaseUserManager);

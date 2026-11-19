@@ -20,6 +20,8 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "GET /collector": [COLLECTOR],
   "GET /citizen": [CITIZEN],
   "GET /users": [ADMIN],
+  "PATCH /users/me": [CITIZEN, COLLECTOR, ADMIN],
+  "DELETE /users/me": [CITIZEN, COLLECTOR, ADMIN],
   "PATCH /users/:id/block": [ADMIN],
   "PATCH /users/:id/unblock": [ADMIN],
   "PATCH /users/:id/role": [ADMIN],
