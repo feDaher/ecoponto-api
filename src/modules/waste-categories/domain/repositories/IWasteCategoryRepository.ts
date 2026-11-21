@@ -1,11 +1,16 @@
+import type { WasteClass } from "../../../../generated/prisma/enums";
 import type { WasteCategory } from "../entities/WasteCategory";
 
 export interface CreateWasteCategoryData {
   name: string;
+  label?: string | null;
+  wasteClass?: WasteClass | null;
 }
 
 export interface UpdateWasteCategoryData {
   name?: string;
+  label?: string | null;
+  wasteClass?: WasteClass | null;
   active?: boolean;
 }
 

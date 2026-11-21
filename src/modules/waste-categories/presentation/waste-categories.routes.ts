@@ -24,7 +24,7 @@ export const wasteCategoriesRoutes = Router();
  *     tags: [Waste Categories]
  *     responses:
  *       200:
- *         description: List of active waste categories
+ *         description: List of active waste categories including label and wasteClass
  */
 wasteCategoriesRoutes.get("/waste-categories", listWasteCategories);
 
@@ -46,6 +46,13 @@ wasteCategoriesRoutes.get("/waste-categories", listWasteCategories);
  *             properties:
  *               name:
  *                 type: string
+ *               label:
+ *                 type: string
+ *                 nullable: true
+ *               wasteClass:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [CLASS_I, CLASS_IIA, CLASS_IIB]
  *     responses:
  *       201:
  *         description: Waste category created
@@ -88,6 +95,13 @@ wasteCategoriesRoutes.post(
  *             properties:
  *               name:
  *                 type: string
+ *               label:
+ *                 type: string
+ *                 nullable: true
+ *               wasteClass:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [CLASS_I, CLASS_IIA, CLASS_IIB]
  *     responses:
  *       200:
  *         description: Waste category updated

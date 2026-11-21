@@ -60,6 +60,12 @@ enum ContentStatus {
   PUBLISHED
 }
 
+enum WasteClass {
+  CLASS_I
+  CLASS_IIA
+  CLASS_IIB
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -122,10 +128,12 @@ model CollectionPoint {
 }
 
 model WasteCategory {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String? @db.VarChar(500)
-  active      Boolean @default(true)
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?     @db.VarChar(500)
+  active      Boolean     @default(true)
+  label       String?     @db.VarChar(191)
+  wasteClass  WasteClass?
 
   educationalContents EducationalContent[]
 
