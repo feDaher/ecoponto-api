@@ -8,6 +8,7 @@ import {
   collectionPointUpdateSchema,
   reviewSchema,
   searchCollectionPointsQuerySchema,
+  updateCollectionPointMaterialSettingsSchema,
 } from "./collection-points.validators";
 import {
   create,
@@ -17,6 +18,7 @@ import {
   listPublic,
   review,
   update,
+  updateMaterialSettings,
 } from "./collection-points.controller";
 
 export const collectionPointsRoutes = Router();
@@ -266,4 +268,57 @@ collectionPointsRoutes.patch(
   authorize(Role.ADMIN),
   validate(reviewSchema),
   review,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/materials/{categoryId}:
+ *   patch:
+ *     summary: Update reception settings for a collection point material
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             minProperties: 1
+ *             additionalProperties: false
+ *             properties:
+ *               capacityKg:
+ *                 type: number
+ *                 exclusiveMinimum: 0
+ *                 maximum: 100000
+ *                 nullable: true
+ *                 description: null removes the capacity limit
+ *                 multipleOf: 0.001
+ *               isAccepting:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Material reception settings updated
+ *       400:
+ *         description: Invalid or empty settings body
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Requester does not own the point and is not an administrator
+ *       404:
+ *         description: Collection point or point category not found
+ */
+collectionPointsRoutes.patch(
+  "/collection-points/:id/materials/:categoryId",
+  authenticate,
+  validate(updateCollectionPointMaterialSettingsSchema),
+  updateMaterialSettings,
 );

@@ -147,6 +147,8 @@ model Waste {
 model PointCategory {
   pointId    String
   categoryId String
+  capacityKg Decimal? @db.Decimal(10, 3)
+  isAccepting Boolean  @default(true)
 
   point    CollectionPoint @relation(fields: [pointId], references: [id])
   category WasteCategory   @relation(fields: [categoryId], references: [id])
