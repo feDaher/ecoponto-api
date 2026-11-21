@@ -136,15 +136,12 @@ describe("collection point category persistence", () => {
     });
   });
 
-  it("filters public search through PointCategory and serializes codes", async () => {
+  it("only returns receiving categories in public search responses", async () => {
     prisma.wasteCategory.findMany.mockResolvedValue([activeCategories[0]]);
     const queryRaw = prisma["$queryRaw"] as unknown as jest.Mock;
     queryRaw.mockImplementation(async (sql: { sql: string }) =>
-      sql.sql.includes("WHERE pc.pointId IN")
-        ? [
-            { pointId: "point-1", name: "PLASTIC" },
-            { pointId: "point-1", name: "GLASS" },
-          ]
+      sql.sql.includes("SELECT pc.pointId, wc.name")
+        ? [{ pointId: "point-1", name: "PLASTIC" }]
         : [{ id: "point-1", distanceKm: null }],
     );
     const { categories: _categories, ...hydratedPoint } = pointWithCategories([]);
@@ -153,12 +150,36 @@ describe("collection point category persistence", () => {
     const response = await request(app).get("/collection-points?wasteType=PLASTIC");
 
     expect(response.status).toBe(200);
-    expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
+    expect(response.body[0].wasteCategories).toEqual(["PLASTIC"]);
     expect(response.body[0]).not.toHaveProperty("categories");
     const [ranked] = queryRaw.mock.calls[0];
     expect(ranked.sql).toContain("FROM PointCategory pc");
     expect(ranked.sql).toContain("wc.active = TRUE");
+    expect(ranked.sql).toContain("pc.isAccepting = TRUE");
     expect(ranked.values).toContain("PLASTIC");
+    const links = queryRaw.mock.calls.find(([sql]) =>
+      sql.sql.includes("SELECT pc.pointId, wc.name"),
+    )?.[0];
+    expect(links.sql).toContain("pc.isAccepting = TRUE");
+  });
+
+  it("only returns receiving categories in public point details", async () => {
+    prisma.collectionPoint.findFirst.mockResolvedValue({
+      ...pointWithCategories(["PLASTIC"]),
+      status: "APPROVED",
+    });
+
+    const response = await request(app).get("/collection-points/point-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body.wasteCategories).toEqual(["PLASTIC"]);
+    expect(prisma.collectionPoint.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          categories: expect.objectContaining({ where: { isAccepting: true } }),
+        }),
+      }),
+    );
   });
 
   it.each([
