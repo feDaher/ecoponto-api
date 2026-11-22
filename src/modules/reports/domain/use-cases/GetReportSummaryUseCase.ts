@@ -2,7 +2,7 @@ import type { ReportFilter, ReportSummary } from "../entities/Report";
 import type { IReportRepository } from "../repositories/IReportRepository";
 import { calculateCo2ForRows } from "../rules/co2-rules";
 import { round } from "../rules/number-rules";
-import { assertValidPeriod, previousPeriod } from "../rules/period-rules";
+import { assertValidPeriod, previousPeriod, toUtcRange } from "../rules/period-rules";
 
 export class GetReportSummaryUseCase {
   constructor(private readonly repository: IReportRepository) {}
@@ -19,7 +19,7 @@ export class GetReportSummaryUseCase {
       { ...filter, from: previous.from, to: previous.to },
       nameByCategoryId,
     );
-
+    const usersPeriod = toUtcRange(filter.from, filter.to);
     return {
       filter,
       totals: current.totals,
@@ -39,6 +39,10 @@ export class GetReportSummaryUseCase {
       },
       co2: current.co2,
       activePoints: { total: await this.repository.countActivePoints() },
+      users: {
+        total: await this.repository.countUsers(),
+        newInPeriod: await this.repository.countNewUsers(usersPeriod.gte, usersPeriod.lt),
+      },
     };
   }
 

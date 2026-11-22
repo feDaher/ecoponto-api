@@ -150,4 +150,19 @@ export class PrismaReportRepository implements IReportRepository {
       where: { status: CollectionPointStatus.APPROVED },
     });
   }
+
+  async countUsers(): Promise<number> {
+    return prismaRead.user.count();
+  }
+
+  async countNewUsers(from: Date, to: Date): Promise<number> {
+    return prismaRead.user.count({
+      where: {
+        createdAt: {
+          gte: from,
+          lt: to,
+        },
+      },
+    });
+  }
 }
