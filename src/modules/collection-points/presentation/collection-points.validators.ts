@@ -215,21 +215,23 @@ export const searchCollectionPointsQuerySchema = z
 
 export type SearchCollectionPointsQuery = z.output<typeof searchCollectionPointsQuerySchema>;
 
-export const updatePointCategoriesSchema = z.strictObject({
-  wasteCategories: z
-    .array(z.string().trim().min(1))
-    .min(1, "Informe ao menos uma categoria")
-    .refine((list) => new Set(list).size === list.length, {
-      message: "Categorias repetidas",
-    }),
-});
-
-export const reviewPointCategorySchema = z
+export const updateCollectionPointMaterialSettingsSchema = z
   .strictObject({
-    status: z.enum(["APPROVED", "REJECTED"]),
-    rejectionReason: z.string().trim().min(1).optional(),
+    capacityKg: z
+      .number()
+      .positive()
+      .max(100_000)
+      .refine((capacity) => Number(capacity.toFixed(3)) === capacity, {
+        message: "capacityKg aceita no máximo três casas decimais",
+      })
+      .nullable()
+      .optional(),
+    isAccepting: z.boolean().optional(),
   })
-  .refine((d) => d.status !== "REJECTED" || !!d.rejectionReason, {
-    message: "Informe o motivo da rejeição",
-    path: ["rejectionReason"],
+  .refine((settings) => settings.capacityKg !== undefined || settings.isAccepting !== undefined, {
+    message: "Informe capacityKg, isAccepting ou ambos",
   });
+
+export type UpdateCollectionPointMaterialSettingsBody = z.infer<
+  typeof updateCollectionPointMaterialSettingsSchema
+>;

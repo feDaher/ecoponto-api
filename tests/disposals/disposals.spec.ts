@@ -45,7 +45,7 @@ const disposalRow = (overrides: Record<string, unknown> = {}) => ({
 function mockAcceptedCreation() {
   prisma.collectionPoint.findUnique.mockResolvedValue(approvedPoint);
   prisma.wasteCategory.findFirst.mockResolvedValue({ id: CATEGORY_ID, name: "PLASTIC" });
-  prisma.pointCategory.findFirst.mockResolvedValue({ pointId: POINT_ID });
+  prisma.pointCategory.findFirst.mockResolvedValue({ isAccepting: true });
   prisma.disposalRecord.create.mockImplementation(async () => {
     const { citizen: _citizen, ...row } = disposalRow();
     return row;
@@ -89,6 +89,7 @@ describe("POST /disposals", () => {
     expect(prisma.pointCategory.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { pointId: POINT_ID, categoryId: CATEGORY_ID, category: { active: true } },
+        select: { isAccepting: true },
       }),
     );
   });
@@ -129,6 +130,18 @@ describe("POST /disposals", () => {
     const response = await request(app).post("/disposals").set(bearer(Role.CITIZEN)).send(body);
 
     expect(response.status).toBe(422);
+    expect(prisma.disposalRecord.create).not.toHaveBeenCalled();
+  });
+
+  it("answers 422 with a clear message when reception for the category is paused", async () => {
+    prisma.collectionPoint.findUnique.mockResolvedValue(approvedPoint);
+    prisma.wasteCategory.findFirst.mockResolvedValue({ id: CATEGORY_ID, name: "PLASTIC" });
+    prisma.pointCategory.findFirst.mockResolvedValue({ isAccepting: false });
+
+    const response = await request(app).post("/disposals").set(bearer(Role.CITIZEN)).send(body);
+
+    expect(response.status).toBe(422);
+    expect(response.body.message).toContain("paused reception");
     expect(prisma.disposalRecord.create).not.toHaveBeenCalled();
   });
 

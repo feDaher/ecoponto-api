@@ -65,7 +65,7 @@ export const disposalsRoutes = Router();
  *       404:
  *         description: Collection point (not approved or unknown) or waste category not found
  *       422:
- *         description: The collection point does not accept this waste category
+ *         description: The point does not accept this category or has paused its reception
  */
 disposalsRoutes.post(
   "/disposals",

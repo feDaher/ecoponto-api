@@ -162,6 +162,7 @@ describe("GET /collection-points filter composition", () => {
     expect(sql).toContain("SEMIJOIN(MATERIALIZATION)");
     expect(sql).toContain("FROM PointCategory pc");
     expect(sql).toContain("wc.active = TRUE");
+    expect(sql).toContain("pc.isAccepting = TRUE");
     expect(sql).toContain("wc.name IN (?)");
     expect(sql).toContain("latitude BETWEEN ? AND ?");
     expect(sql).toContain("longitude BETWEEN ? AND ?");

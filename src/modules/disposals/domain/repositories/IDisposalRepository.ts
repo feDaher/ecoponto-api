@@ -9,6 +9,8 @@ export interface CreateDisposalData {
   disposedAt: Date;
 }
 
+export type PointCategoryReceptionStatus = "ACCEPTING" | "PAUSED" | "NOT_ACCEPTED";
+
 export interface DisposalFilters {
   status?: DisposalStatus;
   categoryId?: string;
@@ -28,7 +30,10 @@ export interface ListDisposalsParams {
 
 export interface IDisposalRepository {
   findPoint(id: string): Promise<DisposalPoint | null>;
-  pointAcceptsCategory(pointId: string, categoryId: string): Promise<boolean>;
+  getPointCategoryReceptionStatus(
+    pointId: string,
+    categoryId: string,
+  ): Promise<PointCategoryReceptionStatus>;
   create(data: CreateDisposalData): Promise<Disposal>;
   findById(id: string): Promise<Disposal | null>;
   findMany(params: ListDisposalsParams): Promise<Paginated<Disposal>>;

@@ -61,6 +61,7 @@ function buildConditions({ city, wasteTypes, origin, radiusKm }: CollectionPoint
       SELECT /*+ SEMIJOIN(MATERIALIZATION) */ pc.pointId FROM PointCategory pc
       JOIN WasteCategory wc ON wc.id = pc.categoryId
       WHERE wc.active = TRUE
+        AND pc.isAccepting = TRUE
         AND pc.approvalStatus = ${PointCategoryApprovalStatus.APPROVED}
         AND wc.name IN (${Prisma.join(wasteTypes)})
     )`);
@@ -102,7 +103,7 @@ export class PrismaCollectionPointSearchRepository implements ICollectionPointSe
       prisma.collectionPoint.findMany({ where: { id: { in: ids } }, omit: publicOmit }),
       // BE-21: pending categories are not exposed publicly.
       prisma.$queryRaw<CategoryLinkRow[]>(
-        Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.pointId IN (${Prisma.join(ids)}) AND pc.approvalStatus = ${PointCategoryApprovalStatus.APPROVED}`,
+        Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.isAccepting = TRUE AND pc.pointId IN (${Prisma.join(ids)}) AND pc.approvalStatus = ${PointCategoryApprovalStatus.APPROVED}`,
       ),
       prisma.$queryRaw<HourRow[]>(
         Prisma.sql`SELECT id, collectionPointId AS pointId, weekday, TIME_FORMAT(openTime, '%H:%i') AS openTime, TIME_FORMAT(closeTime, '%H:%i') AS closeTime FROM OperatingHours WHERE isActive = TRUE AND collectionPointId IN (${Prisma.join(ids)}) ORDER BY collectionPointId, weekday, openTime`,
