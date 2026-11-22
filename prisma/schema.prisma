@@ -60,6 +60,11 @@ enum ContentStatus {
   PUBLISHED
 }
 
+enum PointCategoryApprovalStatus {
+  PENDING
+  APPROVED
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -145,13 +150,15 @@ model Waste {
 }
 
 model PointCategory {
-  pointId    String
-  categoryId String
+  pointId        String
+  categoryId     String
+  approvalStatus PointCategoryApprovalStatus @default(APPROVED)
 
   point    CollectionPoint @relation(fields: [pointId], references: [id])
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+  @@index([approvalStatus])
 }
 
 model EducationalContent {
