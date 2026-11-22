@@ -88,7 +88,12 @@ describe("POST /disposals", () => {
 
     expect(prisma.pointCategory.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { pointId: POINT_ID, categoryId: CATEGORY_ID, category: { active: true } },
+        where: {
+          pointId: POINT_ID,
+          categoryId: CATEGORY_ID,
+          approvalStatus: "APPROVED",
+          category: { active: true },
+        },
         select: { isAccepting: true },
       }),
     );
