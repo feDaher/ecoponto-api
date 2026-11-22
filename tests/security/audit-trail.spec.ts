@@ -89,4 +89,33 @@ describe("audit trail", () => {
       expect.objectContaining({ action: "ACCESS_DENIED", error: "db down" }),
     );
   });
+
+  it("records category reviews as RESOURCE_CHANGED", async () => {
+    prisma.pointCategory.findMany.mockResolvedValue([
+      {
+        pointId: "point-42",
+        categoryId: "cat-9",
+        approvalStatus: "PENDING",
+        category: { name: "GLASS" },
+      },
+    ]);
+    prisma.pointCategory.update.mockResolvedValue({});
+
+    const response = await request(app)
+      .patch("/collection-points/point-42/categories/cat-9/review")
+      .set(bearer(Role.ADMIN))
+      .send({ status: "APPROVED" });
+    await flushAudit();
+
+    expect(response.status).toBe(204);
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: users[Role.ADMIN].id,
+        action: "RESOURCE_CHANGED",
+        method: "PATCH",
+        route: "/collection-points/:id/categories/:categoryId/review",
+        statusCode: 204,
+      }),
+    });
+  });
 });
