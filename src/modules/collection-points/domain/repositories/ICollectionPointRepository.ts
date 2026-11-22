@@ -1,3 +1,5 @@
+import type { PointCategory } from "../entities/PointCategory";
+
 import type {
   CollectionPoint,
   CollectionPointDraft,
@@ -26,7 +28,16 @@ export interface ReviewCollectionPointData {
   reviewedAt: Date;
 }
 export type CollectionPointSummary = Pick<CollectionPoint, "id" | "collectorId" | "status">;
-
+export interface ApplyCategoryChangesData {
+  removeIds: string[];
+  addIds: string[];
+}
+export interface PendingPointCategory {
+  pointId: string;
+  pointName: string;
+  categoryId: string;
+  categoryName: string;
+}
 export interface ICollectionPointRepository {
   create(data: CreateCollectionPointData): Promise<CollectionPoint>;
   update(id: string, data: CollectionPointWriteData): Promise<CollectionPoint>;
@@ -35,4 +46,13 @@ export interface ICollectionPointRepository {
   findSummaryById(id: string): Promise<CollectionPointSummary | null>;
   listMine(collectorId: string): Promise<CollectionPoint[]>;
   listPending(): Promise<CollectionPoint[]>;
+  findActiveCategoriesByNames(names: string[]): Promise<{ id: string; name: string }[]>;
+  findCategoriesByPointId(pointId: string): Promise<PointCategory[]>;
+  applyCategoryChanges(pointId: string, data: ApplyCategoryChangesData): Promise<void>;
+  listPendingCategories(): Promise<PendingPointCategory[]>;
+  reviewCategory(
+    pointId: string,
+    categoryId: string,
+    decision: "APPROVED" | "REJECTED",
+  ): Promise<void>;
 }

@@ -1,8 +1,12 @@
 import { prisma } from "../../../../config/prisma";
-import { CollectionPointStatus } from "../../../../generated/prisma/enums";
+import {
+  CollectionPointStatus,
+  PointCategoryApprovalStatus,
+} from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
 import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
+import { PointCategory } from "../../domain/entities/PointCategory";
 import type {
   CollectionPointWriteData,
   CreateCollectionPointData,
@@ -15,6 +19,14 @@ const pointWithCategories = {
   categories: { include: { category: { select: { name: true } } } },
 } as const;
 const pointWithDetails = { ...pointWithCategories, ...activeHoursInclude };
+// BE-21: the public page only lists categories already approved by an administrator.
+const publicPointDetails = {
+  categories: {
+    where: { approvalStatus: PointCategoryApprovalStatus.APPROVED },
+    include: { category: { select: { name: true } } },
+  },
+  ...activeHoursInclude,
+} as const;
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
@@ -141,7 +153,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const point = await prisma.collectionPoint.findFirst({
       where: { id, status: CollectionPointStatus.APPROVED },
       omit: publicOmit,
-      include: pointWithDetails,
+      include: publicPointDetails,
     });
     return point ? toEntity(point) : null;
   }
@@ -169,5 +181,65 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       orderBy: { createdAt: "asc" },
     });
     return points.map(toEntity);
+  }
+
+  async findActiveCategoriesByNames(names: string[]) {
+    return prisma.wasteCategory.findMany({
+      where: { name: { in: names }, active: true },
+      select: { id: true, name: true },
+    });
+  }
+
+  async findCategoriesByPointId(pointId: string) {
+    const rows = await prisma.pointCategory.findMany({
+      where: { pointId },
+      include: { category: { select: { name: true } } },
+    });
+    return rows.map(
+      (r) => new PointCategory(r.pointId, r.categoryId, r.category.name, r.approvalStatus),
+    );
+  }
+
+  async applyCategoryChanges(
+    pointId: string,
+    { removeIds, addIds }: { removeIds: string[]; addIds: string[] },
+  ) {
+    await prisma.$transaction([
+      prisma.pointCategory.deleteMany({
+        where: { pointId, categoryId: { in: removeIds } },
+      }),
+      prisma.pointCategory.createMany({
+        data: addIds.map((categoryId) => ({
+          pointId,
+          categoryId,
+          approvalStatus: "PENDING" as const,
+        })),
+      }),
+    ]);
+  }
+
+  async listPendingCategories() {
+    const rows = await prisma.pointCategory.findMany({
+      where: { approvalStatus: "PENDING" },
+      include: {
+        point: { select: { name: true } },
+        category: { select: { name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      pointId: r.pointId,
+      pointName: r.point.name,
+      categoryId: r.categoryId,
+      categoryName: r.category.name,
+    }));
+  }
+
+  async reviewCategory(pointId: string, categoryId: string, decision: "APPROVED" | "REJECTED") {
+    const where = { pointId_categoryId: { pointId, categoryId } };
+    if (decision === "APPROVED") {
+      await prisma.pointCategory.update({ where, data: { approvalStatus: "APPROVED" } });
+    } else {
+      await prisma.pointCategory.delete({ where });
+    }
   }
 }

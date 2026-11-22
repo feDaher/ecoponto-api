@@ -1,6 +1,10 @@
 import { prisma } from "../../../../config/prisma";
 import { Prisma } from "../../../../generated/prisma/client";
-import { CollectionPointStatus, type Weekday } from "../../../../generated/prisma/enums";
+import {
+  CollectionPointStatus,
+  PointCategoryApprovalStatus,
+  type Weekday,
+} from "../../../../generated/prisma/enums";
 import { boundingBox, EARTH_RADIUS_KM } from "../../../../shared/geo/distance";
 import type {
   CollectionPointSearchCriteria,
@@ -52,10 +56,13 @@ function buildConditions({ city, wasteTypes, origin, radiusKm }: CollectionPoint
   if (wasteTypes?.length) {
     // MATERIALIZATION builds the set of matching point ids once; without the hint MySQL picks a
     // weedout plan that rescans every approved point once per requested category.
+    // BE-21: only categories approved by an administrator count in the public search.
     conditions.push(Prisma.sql`id IN (
       SELECT /*+ SEMIJOIN(MATERIALIZATION) */ pc.pointId FROM PointCategory pc
       JOIN WasteCategory wc ON wc.id = pc.categoryId
-      WHERE wc.active = TRUE AND wc.name IN (${Prisma.join(wasteTypes)})
+      WHERE wc.active = TRUE
+        AND pc.approvalStatus = ${PointCategoryApprovalStatus.APPROVED}
+        AND wc.name IN (${Prisma.join(wasteTypes)})
     )`);
   }
 
@@ -93,8 +100,9 @@ export class PrismaCollectionPointSearchRepository implements ICollectionPointSe
     const [total, rows, links, hours] = await Promise.all([
       ranked.length < limit ? ranked.length : this.countMatching(where),
       prisma.collectionPoint.findMany({ where: { id: { in: ids } }, omit: publicOmit }),
+      // BE-21: pending categories are not exposed publicly.
       prisma.$queryRaw<CategoryLinkRow[]>(
-        Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.pointId IN (${Prisma.join(ids)})`,
+        Prisma.sql`SELECT pc.pointId, wc.name FROM PointCategory pc JOIN WasteCategory wc ON wc.id = pc.categoryId WHERE pc.pointId IN (${Prisma.join(ids)}) AND pc.approvalStatus = ${PointCategoryApprovalStatus.APPROVED}`,
       ),
       prisma.$queryRaw<HourRow[]>(
         Prisma.sql`SELECT id, collectionPointId AS pointId, weekday, TIME_FORMAT(openTime, '%H:%i') AS openTime, TIME_FORMAT(closeTime, '%H:%i') AS closeTime FROM OperatingHours WHERE isActive = TRUE AND collectionPointId IN (${Prisma.join(ids)}) ORDER BY collectionPointId, weekday, openTime`,
