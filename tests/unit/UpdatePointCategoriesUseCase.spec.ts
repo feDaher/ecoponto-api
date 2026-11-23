@@ -96,4 +96,75 @@ describe("UpdatePointCategoriesUseCase", () => {
 
     expect(repo.applyCategoryChanges).toHaveBeenCalled();
   });
+
+  it("reenviar uma categoria que já está pendente não muda nada", async () => {
+    const repo = makeRepo([
+      new PointCategory("p1", "c1", "PLASTIC", "APPROVED"),
+      new PointCategory("p1", "c2", "GLASS", "PENDING"),
+    ]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([
+      { id: "c1", name: "PLASTIC" },
+      { id: "c2", name: "GLASS" },
+    ]);
+
+    await new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+      pointId: "p1",
+      actor: owner,
+      wasteCategories: ["PLASTIC", "GLASS"],
+    });
+
+    expect(repo.applyCategoryChanges).toHaveBeenCalledWith("p1", {
+      removeIds: [],
+      addIds: [],
+    });
+  });
+
+  it("remover uma categoria pendente é permitido", async () => {
+    const repo = makeRepo([
+      new PointCategory("p1", "c1", "PLASTIC", "APPROVED"),
+      new PointCategory("p1", "c2", "GLASS", "PENDING"),
+    ]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([{ id: "c1", name: "PLASTIC" }]);
+
+    await new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+      pointId: "p1",
+      actor: owner,
+      wasteCategories: ["PLASTIC"],
+    });
+
+    expect(repo.applyCategoryChanges).toHaveBeenCalledWith("p1", {
+      removeIds: ["c2"],
+      addIds: [],
+    });
+  });
+
+  it("422 se sobrar só categoria pendente (nenhuma aprovada)", async () => {
+    const repo = makeRepo([
+      new PointCategory("p1", "c1", "PLASTIC", "APPROVED"),
+      new PointCategory("p1", "c2", "GLASS", "PENDING"),
+    ]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([{ id: "c2", name: "GLASS" }]);
+
+    await expect(
+      new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+        pointId: "p1",
+        actor: owner,
+        wasteCategories: ["GLASS"],
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(repo.applyCategoryChanges).not.toHaveBeenCalled();
+  });
+
+  it("404 se o ponto não existe", async () => {
+    const repo = makeRepo([]);
+    repo.findSummaryById.mockResolvedValue(null);
+
+    await expect(
+      new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+        pointId: "p1",
+        actor: owner,
+        wasteCategories: ["PLASTIC"],
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+  });
 });
