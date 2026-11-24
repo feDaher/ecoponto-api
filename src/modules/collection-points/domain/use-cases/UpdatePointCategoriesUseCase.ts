@@ -1,4 +1,5 @@
 import { AppError } from "../../../../shared/errors/AppError";
+import { Role } from "../../../../generated/prisma/enums";
 import { assertOwnerOrAdmin, type Principal } from "../../../../shared/security/access-policy";
 import type { ICollectionPointRepository } from "../repositories/ICollectionPointRepository";
 
@@ -31,12 +32,22 @@ export class UpdatePointCategoriesUseCase {
       .map((c) => c.categoryId);
     const addIds = requested.filter((c) => !currentIds.has(c.id)).map((c) => c.id);
 
-    const keepsApproved = current.some((c) => c.isApproved && requestedIds.has(c.categoryId));
+    // The ADMIN is the approver, so categories they add are approved right away (and logged in
+    // the review history as their decision); additions by a collector wait for an admin.
+    const addedByAdmin = actor.role === Role.ADMIN;
+
+    const keepsApproved =
+      current.some((c) => c.isApproved && requestedIds.has(c.categoryId)) ||
+      (addedByAdmin && addIds.length > 0);
     if (!keepsApproved) {
       throw new AppError("O ponto precisa manter ao menos uma categoria aprovada", 422);
     }
 
-    await this.repository.applyCategoryChanges(pointId, { removeIds, addIds });
+    await this.repository.applyCategoryChanges(pointId, {
+      removeIds,
+      addIds,
+      approvedById: addedByAdmin ? actor.id : undefined,
+    });
 
     return this.repository.findCategoriesByPointId(pointId);
   }

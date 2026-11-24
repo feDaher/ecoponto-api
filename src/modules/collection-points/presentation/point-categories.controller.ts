@@ -3,11 +3,13 @@ import { PrismaCollectionPointRepository } from "../infra/repositories/PrismaCol
 import { UpdatePointCategoriesUseCase } from "../domain/use-cases/UpdatePointCategoriesUseCase";
 import { ListPendingCategoriesUseCase } from "../domain/use-cases/ListPendingCategoriesUseCase";
 import { ReviewPointCategoryUseCase } from "../domain/use-cases/ReviewPointCategoryUseCase";
+import { ListPointCategoryReviewsUseCase } from "../domain/use-cases/ListPointCategoryReviewsUseCase";
 
 const pointRepository = new PrismaCollectionPointRepository();
 const updateCategoriesUseCase = new UpdatePointCategoriesUseCase(pointRepository);
 const listPendingCategoriesUseCase = new ListPendingCategoriesUseCase(pointRepository);
 const reviewCategoryUseCase = new ReviewPointCategoryUseCase(pointRepository);
+const listCategoryReviewsUseCase = new ListPointCategoryReviewsUseCase(pointRepository);
 
 function paramFrom(request: Request, name: string) {
   const value = request.params[name];
@@ -21,6 +23,14 @@ export async function updateCategories(req: Request, res: Response) {
     wasteCategories: req.body.wasteCategories,
   });
   res.status(200).json(result);
+}
+
+export async function listCategoryReviews(req: Request, res: Response) {
+  const reviews = await listCategoryReviewsUseCase.execute({
+    pointId: paramFrom(req, "id"),
+    requester: req.user!,
+  });
+  res.status(200).json(reviews);
 }
 
 export async function listPendingCategories(_req: Request, res: Response) {

@@ -12,8 +12,9 @@ interface Input {
 export class ReviewPointCategoryUseCase {
   constructor(private readonly repository: ICollectionPointRepository) {}
 
-  async execute({ pointId, categoryId, status, rejectionReason }: Input) {
-    if (status === "REJECTED" && !rejectionReason?.trim()) {
+  async execute({ pointId, categoryId, adminId, status, rejectionReason }: Input) {
+    const reason = rejectionReason?.trim();
+    if (status === "REJECTED" && !reason) {
       throw new AppError("Informe o motivo da rejeição", 400);
     }
 
@@ -23,7 +24,13 @@ export class ReviewPointCategoryUseCase {
     if (entry.isApproved) throw new AppError("Categoria já aprovada", 409);
 
     // The write only touches a link that is still PENDING: if another admin decided first, 409.
-    const reviewed = await this.repository.reviewCategory(pointId, categoryId, status);
+    // The decision (and the reason, for a rejection) goes to the review history in the same
+    // transaction, since rejecting deletes the link itself.
+    const reviewed = await this.repository.reviewCategory(pointId, categoryId, {
+      decision: status,
+      reason: status === "REJECTED" ? reason! : null,
+      reviewedById: adminId,
+    });
     if (!reviewed) throw new AppError("Categoria já revisada", 409);
   }
 }

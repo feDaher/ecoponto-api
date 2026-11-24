@@ -97,6 +97,77 @@ describe("UpdatePointCategoriesUseCase", () => {
     expect(repo.applyCategoryChanges).toHaveBeenCalled();
   });
 
+  it("categoria adicionada pelo coletor fica pendente (sem aprovador)", async () => {
+    const repo = makeRepo([new PointCategory("p1", "c1", "PLASTIC", "APPROVED")]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([
+      { id: "c1", name: "PLASTIC" },
+      { id: "c2", name: "GLASS" },
+    ]);
+
+    await new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+      pointId: "p1",
+      actor: owner,
+      wasteCategories: ["PLASTIC", "GLASS"],
+    });
+
+    expect(repo.applyCategoryChanges).toHaveBeenCalledWith("p1", {
+      removeIds: [],
+      addIds: ["c2"],
+      approvedById: undefined,
+    });
+  });
+
+  it("categoria adicionada pelo admin já entra aprovada, registrando o admin", async () => {
+    const repo = makeRepo([new PointCategory("p1", "c1", "PLASTIC", "APPROVED")]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([
+      { id: "c1", name: "PLASTIC" },
+      { id: "c2", name: "GLASS" },
+    ]);
+
+    await new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+      pointId: "p1",
+      actor: { id: "admin-1", role: "ADMIN" },
+      wasteCategories: ["PLASTIC", "GLASS"],
+    });
+
+    expect(repo.applyCategoryChanges).toHaveBeenCalledWith("p1", {
+      removeIds: [],
+      addIds: ["c2"],
+      approvedById: "admin-1",
+    });
+  });
+
+  it("admin pode trocar todas as categorias, pois as novas já entram aprovadas", async () => {
+    const repo = makeRepo([new PointCategory("p1", "c1", "PLASTIC", "APPROVED")]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([{ id: "c2", name: "GLASS" }]);
+
+    await new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+      pointId: "p1",
+      actor: { id: "admin-1", role: "ADMIN" },
+      wasteCategories: ["GLASS"],
+    });
+
+    expect(repo.applyCategoryChanges).toHaveBeenCalledWith("p1", {
+      removeIds: ["c1"],
+      addIds: ["c2"],
+      approvedById: "admin-1",
+    });
+  });
+
+  it("coletor não pode trocar todas as categorias (as novas ficariam pendentes)", async () => {
+    const repo = makeRepo([new PointCategory("p1", "c1", "PLASTIC", "APPROVED")]);
+    repo.findActiveCategoriesByNames.mockResolvedValue([{ id: "c2", name: "GLASS" }]);
+
+    await expect(
+      new UpdatePointCategoriesUseCase(asRepository(repo)).execute({
+        pointId: "p1",
+        actor: owner,
+        wasteCategories: ["GLASS"],
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(repo.applyCategoryChanges).not.toHaveBeenCalled();
+  });
+
   it("reenviar uma categoria que já está pendente não muda nada", async () => {
     const repo = makeRepo([
       new PointCategory("p1", "c1", "PLASTIC", "APPROVED"),

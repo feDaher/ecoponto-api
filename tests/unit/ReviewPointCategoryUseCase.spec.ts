@@ -25,7 +25,11 @@ describe("ReviewPointCategoryUseCase", () => {
       status: "APPROVED",
     });
 
-    expect(repo.reviewCategory).toHaveBeenCalledWith("p1", "c2", "APPROVED");
+    expect(repo.reviewCategory).toHaveBeenCalledWith("p1", "c2", {
+      decision: "APPROVED",
+      reason: null,
+      reviewedById: "admin-1",
+    });
   });
 
   it("rejeita categoria pendente com motivo", async () => {
@@ -36,10 +40,15 @@ describe("ReviewPointCategoryUseCase", () => {
       categoryId: "c2",
       adminId: "admin-1",
       status: "REJECTED",
-      rejectionReason: "Categoria não atendida pelo ponto",
+      rejectionReason: "  Categoria não atendida pelo ponto  ",
     });
 
-    expect(repo.reviewCategory).toHaveBeenCalledWith("p1", "c2", "REJECTED");
+    // The reason is persisted (trimmed) together with who decided.
+    expect(repo.reviewCategory).toHaveBeenCalledWith("p1", "c2", {
+      decision: "REJECTED",
+      reason: "Categoria não atendida pelo ponto",
+      reviewedById: "admin-1",
+    });
   });
 
   it("400 ao rejeitar sem motivo", async () => {

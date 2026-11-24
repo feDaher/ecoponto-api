@@ -100,6 +100,9 @@ describe("audit trail", () => {
       },
     ]);
     prisma.pointCategory.updateMany.mockResolvedValue({ count: 1 });
+    prisma.$transaction.mockImplementation(async (work: (tx: typeof prisma) => unknown) =>
+      work(prisma),
+    );
 
     const response = await request(app)
       .patch("/collection-points/point-42/categories/cat-9/review")

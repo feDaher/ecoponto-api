@@ -41,6 +41,23 @@ export interface UpdateCollectionPointMaterialSettings {
 export interface ApplyCategoryChangesData {
   removeIds: string[];
   addIds: string[];
+  /** Set when an ADMIN adds categories: they are created APPROVED and logged as their decision. */
+  approvedById?: string;
+}
+export type PointCategoryDecision = "APPROVED" | "REJECTED";
+export interface PointCategoryReviewData {
+  decision: PointCategoryDecision;
+  reason: string | null;
+  reviewedById: string;
+}
+export interface PointCategoryReviewRecord {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  decision: PointCategoryDecision;
+  reason: string | null;
+  reviewedAt: Date;
+  reviewedBy: { id: string; name: string } | null;
 }
 export interface PendingPointCategory {
   pointId: string;
@@ -68,6 +85,7 @@ export interface ICollectionPointRepository {
   reviewCategory(
     pointId: string,
     categoryId: string,
-    decision: "APPROVED" | "REJECTED",
+    review: PointCategoryReviewData,
   ): Promise<boolean>;
+  listCategoryReviews(pointId: string): Promise<PointCategoryReviewRecord[]>;
 }

@@ -2,6 +2,7 @@ import { prisma } from "../../../../config/prisma";
 import {
   CollectionPointStatus,
   PointCategoryApprovalStatus,
+  PointCategoryDecision,
 } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
@@ -12,6 +13,8 @@ import type {
   CollectionPointWriteData,
   CreateCollectionPointData,
   ICollectionPointRepository,
+  ApplyCategoryChangesData,
+  PointCategoryReviewData,
   ReviewCollectionPointData,
 } from "../../domain/repositories/ICollectionPointRepository";
 import { activeHoursInclude, formatHours } from "./operating-hours.include";
@@ -32,6 +35,7 @@ const publicPointWithDetails = { ...pointWithAcceptingCategories, ...activeHours
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
+const CATEGORY_REVIEW_HISTORY_LIMIT = 100;
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 type PublicPointRow = Prisma.CollectionPointGetPayload<{
   include: typeof pointWithDetails;
@@ -237,20 +241,32 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
 
   async applyCategoryChanges(
     pointId: string,
-    { removeIds, addIds }: { removeIds: string[]; addIds: string[] },
+    { removeIds, addIds, approvedById }: ApplyCategoryChangesData,
   ) {
+    const approvalStatus = approvedById
+      ? PointCategoryApprovalStatus.APPROVED
+      : PointCategoryApprovalStatus.PENDING;
+
     await prisma.$transaction([
       prisma.pointCategory.deleteMany({
         where: { pointId, categoryId: { in: removeIds } },
       }),
       prisma.pointCategory.createMany({
-        data: addIds.map((categoryId) => ({
-          pointId,
-          categoryId,
-          approvalStatus: PointCategoryApprovalStatus.PENDING,
-        })),
+        data: addIds.map((categoryId) => ({ pointId, categoryId, approvalStatus })),
         skipDuplicates: true,
       }),
+      ...(approvedById && addIds.length > 0
+        ? [
+            prisma.pointCategoryReview.createMany({
+              data: addIds.map((categoryId) => ({
+                pointId,
+                categoryId,
+                decision: PointCategoryDecision.APPROVED,
+                reviewedById: approvedById,
+              })),
+            }),
+          ]
+        : []),
     ]);
   }
 
@@ -270,16 +286,48 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     }));
   }
 
-  async reviewCategory(pointId: string, categoryId: string, decision: "APPROVED" | "REJECTED") {
-    // Conditional on PENDING so concurrent reviews cannot both win (nor fail with a 500).
-    const where = { pointId, categoryId, approvalStatus: PointCategoryApprovalStatus.PENDING };
-    const { count } =
-      decision === "APPROVED"
-        ? await prisma.pointCategory.updateMany({
-            where,
-            data: { approvalStatus: PointCategoryApprovalStatus.APPROVED },
-          })
-        : await prisma.pointCategory.deleteMany({ where });
-    return count > 0;
+  async reviewCategory(
+    pointId: string,
+    categoryId: string,
+    { decision, reason, reviewedById }: PointCategoryReviewData,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      // Conditional on PENDING so concurrent reviews cannot both win (nor fail with a 500).
+      const where = { pointId, categoryId, approvalStatus: PointCategoryApprovalStatus.PENDING };
+      const { count } =
+        decision === "APPROVED"
+          ? await tx.pointCategory.updateMany({
+              where,
+              data: { approvalStatus: PointCategoryApprovalStatus.APPROVED },
+            })
+          : await tx.pointCategory.deleteMany({ where });
+      if (count === 0) return false;
+
+      await tx.pointCategoryReview.create({
+        data: { pointId, categoryId, decision, reason, reviewedById },
+      });
+      return true;
+    });
+  }
+
+  async listCategoryReviews(pointId: string) {
+    const rows = await prisma.pointCategoryReview.findMany({
+      where: { pointId },
+      orderBy: [{ reviewedAt: "desc" }, { id: "desc" }],
+      take: CATEGORY_REVIEW_HISTORY_LIMIT,
+      include: {
+        category: { select: { name: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      categoryId: row.categoryId,
+      categoryName: row.category.name,
+      decision: row.decision,
+      reason: row.reason,
+      reviewedAt: row.reviewedAt,
+      reviewedBy: row.reviewedBy,
+    }));
   }
 }
