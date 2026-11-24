@@ -41,6 +41,9 @@ beforeEach(() => {
     return fixturePoints;
   });
   prisma.collectionPoint.count.mockResolvedValue(18);
+  prisma.user.count.mockImplementation(async (args?: { where?: unknown }) =>
+    args?.where ? 7 : 120,
+  );
 
   prisma.disposalRecord.findMany.mockImplementation(async (args) => {
     const filtered = applyFilters(fixtureDisposals, args.where);
@@ -74,6 +77,20 @@ describe("GET /reports/summary", () => {
     expect(response.body.comparison.variationPercent).toBe(187.8);
     expect(response.body.co2).toEqual({ avoidedKg: 678.26, treesSaved: 48 });
     expect(response.body.activePoints.total).toBe(18);
+    expect(response.body.users).toEqual({ total: 120, newInPeriod: 7 });
+  });
+
+  it("counts new users inside the period in Brasília time", async () => {
+    await request(app).get(`/reports/summary?${PERIOD}`).set(bearer(Role.ADMIN));
+
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: {
+        createdAt: {
+          gte: new Date(`${FROM}T03:00:00.000Z`),
+          lt: expect.any(Date),
+        },
+      },
+    });
   });
 
   it("ignores cancelled disposals by default and accepts an explicit status filter", async () => {

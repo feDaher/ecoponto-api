@@ -45,6 +45,4 @@ export interface IReportRepository {
   countActivePoints(): Promise<number>;
   countUsers(): Promise<number>;
   countNewUsers(from: Date, to: Date): Promise<number>;
-  countUsers(): Promise<number>;
-  countNewUsers(from: Date, to: Date): Promise<number>;
 }

@@ -19,7 +19,14 @@ export class GetReportSummaryUseCase {
       { ...filter, from: previous.from, to: previous.to },
       nameByCategoryId,
     );
+    // Platform-wide counts: like activePoints, they ignore the disposal filters (region, category).
     const usersPeriod = toUtcRange(filter.from, filter.to);
+    const [activePoints, totalUsers, newUsers] = await Promise.all([
+      this.repository.countActivePoints(),
+      this.repository.countUsers(),
+      this.repository.countNewUsers(usersPeriod.gte, usersPeriod.lt),
+    ]);
+
     return {
       filter,
       totals: current.totals,
@@ -38,11 +45,8 @@ export class GetReportSummaryUseCase {
             : null,
       },
       co2: current.co2,
-      activePoints: { total: await this.repository.countActivePoints() },
-      users: {
-        total: await this.repository.countUsers(),
-        newInPeriod: await this.repository.countNewUsers(usersPeriod.gte, usersPeriod.lt),
-      },
+      activePoints: { total: activePoints },
+      users: { total: totalUsers, newInPeriod: newUsers },
     };
   }
 

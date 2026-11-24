@@ -19,7 +19,10 @@ export const reportsRoutes = Router();
  * @openapi
  * /reports/summary:
  *   get:
- *     summary: KPIs of the selected period (volume, CO2, active collection points)
+ *     summary: KPIs of the selected period (volume, CO2, active collection points, users)
+ *     description: >
+ *       users.total counts every registered user; users.newInPeriod counts users created in the
+ *       period (Brasília days). Both, like activePoints, ignore the disposal filters.
  *     tags: [Reports]
  *     security:
  *       - bearerAuth: []
