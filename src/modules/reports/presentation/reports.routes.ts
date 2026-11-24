@@ -21,8 +21,12 @@ export const reportsRoutes = Router();
  *   get:
  *     summary: KPIs of the selected period (volume, CO2, active collection points, users)
  *     description: >
- *       users.total counts every registered user; users.newInPeriod counts users created in the
- *       period (Brasília days). Both, like activePoints, ignore the disposal filters.
+ *       Every /reports route is scoped by role: an ADMIN sees the whole platform, a COLLECTOR
+ *       only disposals made at their own collection points (the scope comes from the token, not
+ *       from the query). users.scope is "platform" for an ADMIN (total = registered users,
+ *       newInPeriod = users created in the period) and "collector" for a COLLECTOR (total =
+ *       distinct citizens with a CONFIRMED disposal at their points, newInPeriod = those whose
+ *       first one was in the period). activePoints and users ignore region/category/status.
  *     tags: [Reports]
  *     security:
  *       - bearerAuth: []

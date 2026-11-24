@@ -5,6 +5,7 @@ export interface FixtureCategory {
 
 export interface FixturePoint {
   id: string;
+  collectorId: string;
   name: string;
   address: string;
   city: string;
@@ -20,6 +21,7 @@ export interface FixtureDisposal {
   weightKg: number;
   pointsEarned: number;
   status: string;
+  citizenId: string;
   collectionId: string | null;
   categoryId: string;
   category: FixtureCategory;
@@ -31,7 +33,7 @@ export interface WhereClause {
   disposedAt?: { gte?: Date; lt?: Date };
   status?: string;
   categoryId?: string | { in: string[] };
-  collectionPoint?: { is: { city: { contains: string } } };
+  collectionPoint?: { is: { city?: { contains: string }; collectorId?: string } };
 }
 
 export interface ReportWhere {
@@ -46,6 +48,8 @@ export const fixtureCategories: FixtureCategory[] = [
 export const fixturePoints: FixturePoint[] = [
   {
     id: "point-central",
+    // Owned by the COLLECTOR identity of tests/support/identities.ts.
+    collectorId: "user-collector",
     name: "EcoPonto Central",
     address: "Praça Cordovil Pinto Coelho",
     city: "Manhuaçu",
@@ -56,6 +60,7 @@ export const fixturePoints: FixturePoint[] = [
   },
   {
     id: "point-pacheco",
+    collectorId: "user-other-collector",
     name: "Drogaria Pacheco",
     address: "Centro Comercial",
     city: "Manhuaçu",
@@ -73,6 +78,7 @@ export const fixtureDisposals: FixtureDisposal[] = [
     weightKg: 340.5,
     pointsEarned: 120,
     status: "CONFIRMED",
+    citizenId: "citizen-a",
     collectionId: "col-1",
     categoryId: "cat-batteries",
     category: { id: "cat-batteries", name: "BATTERIES" },
@@ -85,6 +91,7 @@ export const fixtureDisposals: FixtureDisposal[] = [
     weightKg: 100,
     pointsEarned: 30,
     status: "CONFIRMED",
+    citizenId: "citizen-b",
     collectionId: "col-2",
     categoryId: "cat-paper",
     category: { id: "cat-paper", name: "PAPER" },
@@ -97,6 +104,7 @@ export const fixtureDisposals: FixtureDisposal[] = [
     weightKg: 50,
     pointsEarned: 10,
     status: "CANCELLED",
+    citizenId: "citizen-a",
     collectionId: "col-3",
     categoryId: "cat-batteries",
     category: { id: "cat-batteries", name: "BATTERIES" },
@@ -109,6 +117,7 @@ export const fixtureDisposals: FixtureDisposal[] = [
     weightKg: 120,
     pointsEarned: 40,
     status: "CONFIRMED",
+    citizenId: "citizen-b",
     collectionId: "col-4",
     categoryId: "cat-paper",
     category: { id: "cat-paper", name: "PAPER" },
@@ -121,6 +130,7 @@ export const fixtureDisposals: FixtureDisposal[] = [
     weightKg: 60,
     pointsEarned: 15,
     status: "CONFIRMED",
+    citizenId: "citizen-c",
     collectionId: "col-5",
     categoryId: "cat-paper",
     category: { id: "cat-paper", name: "PAPER" },
@@ -154,9 +164,28 @@ export function applyFilters(rows: FixtureDisposal[], where: ReportWhere): Fixtu
         if (!row.collectionPoint.city.toLowerCase().includes(term)) return false;
       }
 
+      if (clause.collectionPoint?.is?.collectorId) {
+        if (row.collectionPoint.collectorId !== clause.collectionPoint.is.collectorId) return false;
+      }
+
       return true;
     }),
   );
+}
+
+// Mirrors countCitizensAtCollector: CONFIRMED disposals at one collector's points, by citizen.
+export function groupByCitizen(
+  rows: FixtureDisposal[],
+  where: { status?: string; collectionPoint?: { is: { collectorId: string } } },
+) {
+  const first = new Map<string, Date>();
+  for (const row of rows) {
+    if (where.status && row.status !== where.status) continue;
+    if (row.collectionPoint.collectorId !== where.collectionPoint?.is.collectorId) continue;
+    const current = first.get(row.citizenId);
+    if (!current || row.disposedAt < current) first.set(row.citizenId, row.disposedAt);
+  }
+  return [...first].map(([citizenId, disposedAt]) => ({ citizenId, _min: { disposedAt } }));
 }
 
 export function groupByCategory(rows: FixtureDisposal[]) {

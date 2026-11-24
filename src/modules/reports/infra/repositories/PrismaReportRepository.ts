@@ -4,6 +4,7 @@ import { CollectionPointStatus, DisposalStatus } from "../../../../generated/pri
 import type { DisposalRaw, ReportFilter } from "../../domain/entities/Report";
 import type {
   CategoryAggregate,
+  CitizenReach,
   CategoryOption,
   DisposalQueryOptions,
   IReportRepository,
@@ -28,6 +29,9 @@ export class PrismaReportRepository implements IReportRepository {
         ...(filter.region
           ? [{ collectionPoint: { is: { city: { contains: filter.region } } } }]
           : []),
+        ...(filter.collectorId
+          ? [{ collectionPoint: { is: { collectorId: filter.collectorId } } }]
+          : []),
       ],
     };
   }
@@ -42,8 +46,9 @@ export class PrismaReportRepository implements IReportRepository {
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  async listRegions(): Promise<string[]> {
+  async listRegions(collectorId?: string): Promise<string[]> {
     const points = await prismaRead.collectionPoint.findMany({
+      ...(collectorId ? { where: { collectorId } } : {}),
       distinct: ["city"],
       select: { city: true },
     });
@@ -145,14 +150,36 @@ export class PrismaReportRepository implements IReportRepository {
     }));
   }
 
-  async countActivePoints(): Promise<number> {
+  async countActivePoints(collectorId?: string): Promise<number> {
     return prismaRead.collectionPoint.count({
-      where: { status: CollectionPointStatus.APPROVED },
+      where: { status: CollectionPointStatus.APPROVED, ...(collectorId ? { collectorId } : {}) },
     });
   }
 
   async countUsers(): Promise<number> {
     return prismaRead.user.count();
+  }
+
+  // One group per citizen who ever delivered (CONFIRMED) at the collector's points; the earliest
+  // disposal tells whether the citizen is new in the period. Only counts leave this method.
+  async countCitizensAtCollector(collectorId: string, from: Date, to: Date): Promise<CitizenReach> {
+    const groups = await prismaRead.disposalRecord.groupBy({
+      by: ["citizenId"],
+      where: {
+        status: DisposalStatus.CONFIRMED,
+        collectionPoint: { is: { collectorId } },
+      },
+      _min: { disposedAt: true },
+    });
+
+    if (!Array.isArray(groups)) return { total: 0, newInPeriod: 0 };
+
+    const newInPeriod = groups.filter(({ _min }) => {
+      const first = _min.disposedAt;
+      return first !== null && first >= from && first < to;
+    }).length;
+
+    return { total: groups.length, newInPeriod };
   }
 
   async countNewUsers(from: Date, to: Date): Promise<number> {
