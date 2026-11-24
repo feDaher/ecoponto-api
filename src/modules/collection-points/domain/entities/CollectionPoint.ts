@@ -34,7 +34,14 @@ export interface CollectionPoint {
   createdAt: Date;
   updatedAt: Date;
   wasteCategories: string[];
+  categoryApprovals?: CollectionPointCategoryApproval[];
   collector?: { id: string; name: string; email: string };
+}
+export interface CollectionPointCategoryApproval {
+  categoryId: string;
+  name: string;
+  approvalStatus: "PENDING" | "APPROVED";
+  isAccepting: boolean;
 }
 export interface CollectionPointDraft {
   name: string;

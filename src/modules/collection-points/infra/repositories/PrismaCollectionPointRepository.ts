@@ -210,7 +210,18 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       orderBy: { updatedAt: "desc" },
       include: pointWithDetails,
     });
-    return points.map(toEntity);
+    // The owner needs to tell approved categories from those still waiting for an admin (BE-21).
+    return points.map((row) => ({
+      ...toEntity(row),
+      categoryApprovals: row.categories
+        .map((link) => ({
+          categoryId: link.categoryId,
+          name: link.category.name,
+          approvalStatus: link.approvalStatus,
+          isAccepting: link.isAccepting,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
   }
 
   async listPending() {
