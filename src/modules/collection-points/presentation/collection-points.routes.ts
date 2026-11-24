@@ -111,7 +111,10 @@ collectionPointsRoutes.get(
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: The collector's points, including moderation status
+ *         description: >
+ *           The collector's points, including moderation status. Besides wasteCategories (codes),
+ *           each point has categoryApprovals [{ categoryId, name, approvalStatus, isAccepting }],
+ *           so the owner can tell approved categories from those still pending (BE-21).
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
