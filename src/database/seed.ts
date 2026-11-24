@@ -1,7 +1,7 @@
 import type { UserRecord } from "firebase-admin/auth";
 import { firebaseAuth } from "../config/firebase";
 import { prisma } from "../config/prisma";
-import { Role } from "../generated/prisma/enums";
+import { Role, WasteClass } from "../generated/prisma/enums";
 import { seedDemoData } from "./seed-demo";
 
 const SEED_PASSWORD = "Ecoponto@123";
@@ -31,17 +31,72 @@ const seedUsers = [
 ];
 
 const seedWasteCategories = [
-  { name: "PLASTIC", description: "Plástico" },
-  { name: "PAPER", description: "Papel" },
-  { name: "METALS", description: "Metais" },
-  { name: "GLASS", description: "Vidro" },
-  { name: "COOKING_OIL", description: "Óleo de cozinha usado" },
-  { name: "ELECTRONICS", description: "Eletrônicos em geral" },
-  { name: "BATTERIES", description: "Pilhas e baterias" },
-  { name: "CELL_PHONES", description: "Celulares" },
-  { name: "COMPUTERS", description: "Computadores" },
-  { name: "PRINTERS", description: "Impressoras" },
-  { name: "TELEVISIONS", description: "Televisores" },
+  {
+    name: "PLASTIC",
+    description: "Plástico",
+    label: "Plásticos",
+    wasteClass: WasteClass.CLASS_IIA,
+  },
+  {
+    name: "PAPER",
+    description: "Papel",
+    label: "Papéis e Papelão",
+    wasteClass: WasteClass.CLASS_IIA,
+  },
+  {
+    name: "METALS",
+    description: "Metais",
+    label: "Metais",
+    wasteClass: WasteClass.CLASS_IIB,
+  },
+  {
+    name: "GLASS",
+    description: "Vidro",
+    label: "Vidro",
+    wasteClass: WasteClass.CLASS_IIB,
+  },
+  {
+    name: "COOKING_OIL",
+    description: "Óleo de cozinha usado",
+    label: "Óleo de Cozinha",
+    wasteClass: WasteClass.CLASS_IIA,
+  },
+  {
+    name: "ELECTRONICS",
+    description: "Eletrônicos em geral",
+    label: "Eletrônicos Diversos",
+    wasteClass: WasteClass.CLASS_I,
+  },
+  {
+    name: "BATTERIES",
+    description: "Pilhas e baterias",
+    label: "Baterias, Células de Lítio & Pilhas",
+    wasteClass: WasteClass.CLASS_I,
+  },
+  {
+    name: "CELL_PHONES",
+    description: "Celulares",
+    label: "Smartphones & Telefonia Móvel",
+    wasteClass: WasteClass.CLASS_I,
+  },
+  {
+    name: "COMPUTERS",
+    description: "Computadores",
+    label: "Informática & Placas-Mãe",
+    wasteClass: WasteClass.CLASS_I,
+  },
+  {
+    name: "PRINTERS",
+    description: "Impressoras",
+    label: "Impressoras & Equipamentos de Impressão",
+    wasteClass: WasteClass.CLASS_I,
+  },
+  {
+    name: "TELEVISIONS",
+    description: "Televisores",
+    label: "Monitores, Telas LCD & Tubos CRT",
+    wasteClass: WasteClass.CLASS_I,
+  },
 ];
 
 async function findOrCreateFirebaseUser(email: string, displayName: string): Promise<UserRecord> {
@@ -66,15 +121,35 @@ async function main() {
     throw new Error("Refusing to run the seed with NODE_ENV=production");
   }
 
-  await prisma.$transaction(
-    seedWasteCategories.map(({ name, description }) =>
-      prisma.wasteCategory.upsert({
+  await prisma.$transaction(async (tx) => {
+    for (const { name, description, label, wasteClass } of seedWasteCategories) {
+      const existing = await tx.wasteCategory.findUnique({
         where: { name },
-        create: { name, description },
-        update: { description },
-      }),
-    ),
-  );
+      });
+
+      if (!existing) {
+        await tx.wasteCategory.create({
+          data: {
+            name,
+            description,
+            label,
+            wasteClass,
+          },
+        });
+
+        continue;
+      }
+
+      await tx.wasteCategory.update({
+        where: { id: existing.id },
+        data: {
+          description,
+          ...(existing.label === null ? { label } : {}),
+          ...(existing.wasteClass === null ? { wasteClass } : {}),
+        },
+      });
+    }
+  });
 
   console.log(`✔ ${seedWasteCategories.length} waste categories`);
 

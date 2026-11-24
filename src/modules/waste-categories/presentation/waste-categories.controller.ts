@@ -25,6 +25,8 @@ export async function updateWasteCategory(req: Request, res: Response) {
   const category = await updateWasteCategoryUseCase.execute({
     id: String(req.params.id),
     name: req.body.name,
+    label: req.body.label,
+    wasteClass: req.body.wasteClass,
   });
   res.status(200).json(category);
 }

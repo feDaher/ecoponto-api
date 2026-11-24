@@ -1,3 +1,4 @@
+import { PointCategoryApprovalStatus } from "../../../../generated/prisma/enums";
 import { prisma } from "../../../../config/prisma";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { DisposalStatus } from "../../../../generated/prisma/enums";
@@ -44,15 +45,21 @@ export class PrismaDisposalRepository implements IDisposalRepository {
     });
   }
 
-  // Since BE-16 the accepted categories live only in PointCategory (the JSON column is gone).
-  // Same rule as the public search: only an active category counts.
-  async pointAcceptsCategory(pointId: string, categoryId: string) {
+  // A paused link stays in the point portfolio but cannot receive new disposals.
+  // A link still awaiting administrator approval (BE-21) is not accepted either.
+  async getPointCategoryReceptionStatus(pointId: string, categoryId: string) {
     const link = await prisma.pointCategory.findFirst({
-      where: { pointId, categoryId, category: { active: true } },
-      select: { pointId: true },
+      where: {
+        pointId,
+        categoryId,
+        approvalStatus: PointCategoryApprovalStatus.APPROVED,
+        category: { active: true },
+      },
+      select: { isAccepting: true },
     });
 
-    return link !== null;
+    if (!link) return "NOT_ACCEPTED" as const;
+    return link.isAccepting ? ("ACCEPTING" as const) : ("PAUSED" as const);
   }
 
   async create(data: CreateDisposalData) {

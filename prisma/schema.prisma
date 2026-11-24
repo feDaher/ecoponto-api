@@ -60,6 +60,17 @@ enum ContentStatus {
   PUBLISHED
 }
 
+enum WasteClass {
+  CLASS_I
+  CLASS_IIA
+  CLASS_IIB
+}
+
+enum PointCategoryApprovalStatus {
+  PENDING
+  APPROVED
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -122,10 +133,12 @@ model CollectionPoint {
 }
 
 model WasteCategory {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String? @db.VarChar(500)
-  active      Boolean @default(true)
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?     @db.VarChar(500)
+  active      Boolean     @default(true)
+  label       String?     @db.VarChar(191)
+  wasteClass  WasteClass?
 
   educationalContents EducationalContent[]
 
@@ -145,13 +158,17 @@ model Waste {
 }
 
 model PointCategory {
-  pointId    String
-  categoryId String
+  pointId        String
+  categoryId     String
+  capacityKg     Decimal?                    @db.Decimal(10, 3)
+  isAccepting    Boolean                     @default(true)
+  approvalStatus PointCategoryApprovalStatus @default(APPROVED)
 
   point    CollectionPoint @relation(fields: [pointId], references: [id])
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+  @@index([approvalStatus])
 }
 
 model EducationalContent {
