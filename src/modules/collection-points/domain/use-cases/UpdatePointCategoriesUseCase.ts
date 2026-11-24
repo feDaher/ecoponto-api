@@ -1,9 +1,10 @@
 import { AppError } from "../../../../shared/errors/AppError";
+import { assertOwnerOrAdmin, type Principal } from "../../../../shared/security/access-policy";
 import type { ICollectionPointRepository } from "../repositories/ICollectionPointRepository";
 
 interface Input {
   pointId: string;
-  actor: { id: string; role: string };
+  actor: Principal;
   wasteCategories: string[];
 }
 
@@ -14,9 +15,7 @@ export class UpdatePointCategoriesUseCase {
     const point = await this.repository.findSummaryById(pointId);
     if (!point) throw new AppError("Ponto de coleta não encontrado", 404);
 
-    if (actor.role !== "ADMIN" && point.collectorId !== actor.id) {
-      throw new AppError("Sem permissão para alterar este ponto", 403);
-    }
+    assertOwnerOrAdmin(actor, point.collectorId, "Sem permissão para alterar este ponto");
 
     const requested = await this.repository.findActiveCategoriesByNames(wasteCategories);
     if (requested.length !== wasteCategories.length) {

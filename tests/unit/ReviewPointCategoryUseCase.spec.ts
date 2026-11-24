@@ -5,7 +5,7 @@ import type { ICollectionPointRepository } from "../../src/modules/collection-po
 function makeRepo(current: PointCategory[]) {
   return {
     findCategoriesByPointId: jest.fn().mockResolvedValue(current),
-    reviewCategory: jest.fn().mockResolvedValue(undefined),
+    reviewCategory: jest.fn().mockResolvedValue(true),
   };
 }
 

@@ -69,5 +69,5 @@ export interface ICollectionPointRepository {
     pointId: string,
     categoryId: string,
     decision: "APPROVED" | "REJECTED",
-  ): Promise<void>;
+  ): Promise<boolean>;
 }

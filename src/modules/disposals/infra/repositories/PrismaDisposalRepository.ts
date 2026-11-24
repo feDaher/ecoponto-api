@@ -46,7 +46,6 @@ export class PrismaDisposalRepository implements IDisposalRepository {
   }
 
   // A paused link stays in the point portfolio but cannot receive new disposals.
-  // A paused link stays in the point portfolio but cannot receive new disposals.
   // A link still awaiting administrator approval (BE-21) is not accepted either.
   async getPointCategoryReceptionStatus(pointId: string, categoryId: string) {
     const link = await prisma.pointCategory.findFirst({

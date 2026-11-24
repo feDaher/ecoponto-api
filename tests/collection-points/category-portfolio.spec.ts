@@ -66,6 +66,7 @@ describe("PUT /collection-points/:id/categories", () => {
     expect(response.status).toBe(200);
     expect(prisma.pointCategory.createMany).toHaveBeenCalledWith({
       data: [{ pointId: POINT_ID, categoryId: glass.id, approvalStatus: "PENDING" }],
+      skipDuplicates: true,
     });
     expect(prisma.collectionPoint.update).not.toHaveBeenCalled();
   });
@@ -167,7 +168,7 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
 
   it("approves a pending category", async () => {
     prisma.pointCategory.findMany.mockResolvedValue([link(glass.id, "GLASS", "PENDING")]);
-    prisma.pointCategory.update.mockResolvedValue({});
+    prisma.pointCategory.updateMany.mockResolvedValue({ count: 1 });
 
     const response = await request(app)
       .patch(url)
@@ -175,15 +176,15 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       .send({ status: "APPROVED" });
 
     expect(response.status).toBe(204);
-    expect(prisma.pointCategory.update).toHaveBeenCalledWith({
-      where: { pointId_categoryId: { pointId: POINT_ID, categoryId: glass.id } },
+    expect(prisma.pointCategory.updateMany).toHaveBeenCalledWith({
+      where: { pointId: POINT_ID, categoryId: glass.id, approvalStatus: "PENDING" },
       data: { approvalStatus: "APPROVED" },
     });
   });
 
   it("rejects a pending category by removing the link", async () => {
     prisma.pointCategory.findMany.mockResolvedValue([link(glass.id, "GLASS", "PENDING")]);
-    prisma.pointCategory.delete.mockResolvedValue({});
+    prisma.pointCategory.deleteMany.mockResolvedValue({ count: 1 });
 
     const response = await request(app)
       .patch(url)
@@ -191,9 +192,31 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       .send({ status: "REJECTED", rejectionReason: "Não aceitamos vidro" });
 
     expect(response.status).toBe(204);
-    expect(prisma.pointCategory.delete).toHaveBeenCalledWith({
-      where: { pointId_categoryId: { pointId: POINT_ID, categoryId: glass.id } },
+    expect(prisma.pointCategory.deleteMany).toHaveBeenCalledWith({
+      where: { pointId: POINT_ID, categoryId: glass.id, approvalStatus: "PENDING" },
     });
+  });
+
+  it("answers 409 when another admin reviewed the category first", async () => {
+    prisma.pointCategory.findMany.mockResolvedValue([link(glass.id, "GLASS", "PENDING")]);
+    prisma.pointCategory.updateMany.mockResolvedValue({ count: 0 });
+
+    const response = await request(app)
+      .patch(url)
+      .set(bearer(Role.ADMIN))
+      .send({ status: "APPROVED" });
+
+    expect(response.status).toBe(409);
+  });
+
+  it("rejects an oversized rejection reason", async () => {
+    const response = await request(app)
+      .patch(url)
+      .set(bearer(Role.ADMIN))
+      .send({ status: "REJECTED", rejectionReason: "x".repeat(501) });
+
+    expect(response.status).toBe(400);
+    expect(prisma.pointCategory.findMany).not.toHaveBeenCalled();
   });
 
   it("requires a reason to reject", async () => {
@@ -203,7 +226,7 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       .send({ status: "REJECTED" });
 
     expect(response.status).toBe(400);
-    expect(prisma.pointCategory.delete).not.toHaveBeenCalled();
+    expect(prisma.pointCategory.deleteMany).not.toHaveBeenCalled();
   });
 
   it("answers 404 when the category is not linked to the point", async () => {
@@ -235,6 +258,6 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       .send({ status: "APPROVED" });
 
     expect(response.status).toBe(403);
-    expect(prisma.pointCategory.update).not.toHaveBeenCalled();
+    expect(prisma.pointCategory.updateMany).not.toHaveBeenCalled();
   });
 });

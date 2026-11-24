@@ -2,7 +2,7 @@ import { UpdatePointCategoriesUseCase } from "../../src/modules/collection-point
 import { PointCategory } from "../../src/modules/collection-points/domain/entities/PointCategory";
 import type { ICollectionPointRepository } from "../../src/modules/collection-points/domain/repositories/ICollectionPointRepository";
 
-const owner = { id: "u1", role: "COLLECTOR" };
+const owner = { id: "u1", role: "COLLECTOR" } as const;
 
 function makeRepo(current: PointCategory[]) {
   return {

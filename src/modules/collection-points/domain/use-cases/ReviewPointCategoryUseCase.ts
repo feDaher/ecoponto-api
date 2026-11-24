@@ -22,6 +22,8 @@ export class ReviewPointCategoryUseCase {
     if (!entry) throw new AppError("Categoria não encontrada neste ponto", 404);
     if (entry.isApproved) throw new AppError("Categoria já aprovada", 409);
 
-    await this.repository.reviewCategory(pointId, categoryId, status);
+    // The write only touches a link that is still PENDING: if another admin decided first, 409.
+    const reviewed = await this.repository.reviewCategory(pointId, categoryId, status);
+    if (!reviewed) throw new AppError("Categoria já revisada", 409);
   }
 }

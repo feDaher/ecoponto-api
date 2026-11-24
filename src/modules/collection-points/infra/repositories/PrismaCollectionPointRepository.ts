@@ -247,8 +247,9 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         data: addIds.map((categoryId) => ({
           pointId,
           categoryId,
-          approvalStatus: "PENDING" as const,
+          approvalStatus: PointCategoryApprovalStatus.PENDING,
         })),
+        skipDuplicates: true,
       }),
     ]);
   }
@@ -270,11 +271,15 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
   }
 
   async reviewCategory(pointId: string, categoryId: string, decision: "APPROVED" | "REJECTED") {
-    const where = { pointId_categoryId: { pointId, categoryId } };
-    if (decision === "APPROVED") {
-      await prisma.pointCategory.update({ where, data: { approvalStatus: "APPROVED" } });
-    } else {
-      await prisma.pointCategory.delete({ where });
-    }
+    // Conditional on PENDING so concurrent reviews cannot both win (nor fail with a 500).
+    const where = { pointId, categoryId, approvalStatus: PointCategoryApprovalStatus.PENDING };
+    const { count } =
+      decision === "APPROVED"
+        ? await prisma.pointCategory.updateMany({
+            where,
+            data: { approvalStatus: PointCategoryApprovalStatus.APPROVED },
+          })
+        : await prisma.pointCategory.deleteMany({ where });
+    return count > 0;
   }
 }
