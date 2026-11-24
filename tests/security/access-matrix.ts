@@ -55,7 +55,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "POST /collection-points": [COLLECTOR],
   "PUT /collection-points/:id": [COLLECTOR],
   "PATCH /collection-points/:id/review": [ADMIN],
-  "PATCH /collection-points/:id/materials/:categoryId": ANY_AUTHENTICATED,
+  "PATCH /collection-points/:id/materials/:categoryId": [COLLECTOR, ADMIN],
 
   "GET /collection-points/admin/pending-categories": [ADMIN],
   "PUT /collection-points/:id/categories": [COLLECTOR, ADMIN],

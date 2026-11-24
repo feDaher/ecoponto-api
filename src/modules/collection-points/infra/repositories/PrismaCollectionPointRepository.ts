@@ -121,11 +121,14 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
+        // Diff the links instead of recreating them: categories kept on resubmission must keep
+        // their reception settings (BE-19) instead of silently going back to the defaults.
         categories: {
-          deleteMany: {},
-          create: data.categoryIds.map((categoryId) => ({
-            category: { connect: { id: categoryId } },
-          })),
+          deleteMany: { categoryId: { notIn: data.categoryIds } },
+          createMany: {
+            data: data.categoryIds.map((categoryId) => ({ categoryId })),
+            skipDuplicates: true,
+          },
         },
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,

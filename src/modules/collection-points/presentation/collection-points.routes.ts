@@ -443,13 +443,14 @@ collectionPointsRoutes.patch(
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
- *         description: Requester does not own the point and is not an administrator
+ *         description: Requester is not a collector/administrator, or does not own the point
  *       404:
  *         description: Collection point or point category not found
  */
 collectionPointsRoutes.patch(
   "/collection-points/:id/materials/:categoryId",
   authenticate,
+  authorize(Role.COLLECTOR, Role.ADMIN),
   validate(updateCollectionPointMaterialSettingsSchema),
   updateMaterialSettings,
 );

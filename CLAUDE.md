@@ -75,7 +75,7 @@ A citizen logs a disposal with `POST /disposals` (`collectionPointId`, `category
 
 ### Collection-point material settings (BE-19)
 
-`PointCategory.capacityKg` is an optional storage limit (`Decimal(10,3)`); `null` means no limit. `PointCategory.isAccepting` defaults to `true`, so existing links continue receiving after migration. `PATCH /collection-points/:id/materials/:categoryId` updates either field (or both); only the point owner or an ADMIN may call it, and the category must already be linked to the point. A paused category remains in the point's portfolio, is omitted from public `wasteCategories` and `wasteType` search results, and causes `POST /disposals` to answer 422 until reception is reactivated.
+`PointCategory.capacityKg` is an optional storage limit (`Decimal(10,3)`); `null` means no limit. `PointCategory.isAccepting` defaults to `true`, so existing links continue receiving after migration. `PATCH /collection-points/:id/materials/:categoryId` updates either field (or both); only COLLECTOR/ADMIN reach it (`authorize`) and only the point owner or an ADMIN may change it, and the category must already be linked to the point. A paused category remains in the point's portfolio, is omitted from public `wasteCategories` and `wasteType` search results, and causes `POST /disposals` to answer 422 until reception is reactivated. Resubmitting the point (`PUT /collection-points/:id`) diffs the links (`deleteMany notIn` + `createMany skipDuplicates`), so kept categories keep their `capacityKg`/`isAccepting`.
 
 ### Ranking (RB09)
 

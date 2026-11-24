@@ -124,6 +124,17 @@ describe("PATCH /collection-points/:id/materials/:categoryId", () => {
     expect(response.status).toBe(401);
   });
 
+  it("returns 403 to a citizen before touching the database", async () => {
+    const response = await request(app)
+      .patch(`/collection-points/${POINT_ID}/materials/${CATEGORY_ID}`)
+      .set(bearer(Role.CITIZEN))
+      .send({ isAccepting: false });
+
+    expect(response.status).toBe(403);
+    expect(prisma.collectionPoint.findUnique).not.toHaveBeenCalled();
+    expect(prisma.pointCategory.updateMany).not.toHaveBeenCalled();
+  });
+
   it("returns 403 when another collector tries to manage the point", async () => {
     givenPointOwnedBy("another-collector");
 

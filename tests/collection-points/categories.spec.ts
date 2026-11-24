@@ -112,7 +112,7 @@ describe("collection point category persistence", () => {
     expect(prisma.collectionPoint.create).not.toHaveBeenCalled();
   });
 
-  it("replaces category links on edit and returns the same code-list format", async () => {
+  it("updates category links on edit and returns the same code-list format", async () => {
     prisma.collectionPoint.findUnique.mockResolvedValue({
       id: "point-1",
       collectorId: users[Role.COLLECTOR].id,
@@ -130,9 +130,10 @@ describe("collection point category persistence", () => {
 
     const updateCall = prisma.collectionPoint.update.mock.calls[0][0];
     expect(updateCall.data).not.toHaveProperty("wasteCategories");
+    // Kept links are not recreated, so their reception settings (BE-19) survive the resubmission.
     expect(updateCall.data.categories).toEqual({
-      deleteMany: {},
-      create: [{ category: { connect: { id: "category-glass" } } }],
+      deleteMany: { categoryId: { notIn: ["category-glass"] } },
+      createMany: { data: [{ categoryId: "category-glass" }], skipDuplicates: true },
     });
   });
 
