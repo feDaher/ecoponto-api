@@ -1,3 +1,4 @@
+import { PointCategoryApprovalStatus } from "../../../../generated/prisma/enums";
 import { prisma } from "../../../../config/prisma";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { DisposalStatus } from "../../../../generated/prisma/enums";
@@ -45,9 +46,15 @@ export class PrismaDisposalRepository implements IDisposalRepository {
   }
 
   // A paused link stays in the point portfolio but cannot receive new disposals.
+  // A link still awaiting administrator approval (BE-21) is not accepted either.
   async getPointCategoryReceptionStatus(pointId: string, categoryId: string) {
     const link = await prisma.pointCategory.findFirst({
-      where: { pointId, categoryId, category: { active: true } },
+      where: {
+        pointId,
+        categoryId,
+        approvalStatus: PointCategoryApprovalStatus.APPROVED,
+        category: { active: true },
+      },
       select: { isAccepting: true },
     });
 

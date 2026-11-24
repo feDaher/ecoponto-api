@@ -183,7 +183,7 @@ describe("GET /collection-points filter composition", () => {
 
     const conditions = (sql: Prisma.Sql) => sql.sql.slice(sql.sql.indexOf("WHERE"));
     expect(conditions(countQuery())).toBe(conditions(rankedQuery()).replace(/ ORDER BY.*/, ""));
-    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", "GLASS"]);
+    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", "APPROVED", "GLASS"]);
   });
 
   it("matches any of several waste types and ignores duplicates", async () => {

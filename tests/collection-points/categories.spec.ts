@@ -177,7 +177,9 @@ describe("collection point category persistence", () => {
     expect(prisma.collectionPoint.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         include: expect.objectContaining({
-          categories: expect.objectContaining({ where: { isAccepting: true } }),
+          categories: expect.objectContaining({
+            where: { isAccepting: true, approvalStatus: "APPROVED" },
+          }),
         }),
       }),
     );
