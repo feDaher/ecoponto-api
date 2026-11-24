@@ -162,6 +162,7 @@ describe("GET /collection-points filter composition", () => {
     expect(sql).toContain("SEMIJOIN(MATERIALIZATION)");
     expect(sql).toContain("FROM PointCategory pc");
     expect(sql).toContain("wc.active = TRUE");
+    expect(sql).toContain("pc.isAccepting = TRUE");
     expect(sql).toContain("wc.name IN (?)");
     expect(sql).toContain("latitude BETWEEN ? AND ?");
     expect(sql).toContain("longitude BETWEEN ? AND ?");
@@ -182,7 +183,7 @@ describe("GET /collection-points filter composition", () => {
 
     const conditions = (sql: Prisma.Sql) => sql.sql.slice(sql.sql.indexOf("WHERE"));
     expect(conditions(countQuery())).toBe(conditions(rankedQuery()).replace(/ ORDER BY.*/, ""));
-    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", "GLASS"]);
+    expect(countQuery().values).toEqual(["APPROVED", "Manhuaçu", "APPROVED", "GLASS"]);
   });
 
   it("matches any of several waste types and ignores duplicates", async () => {

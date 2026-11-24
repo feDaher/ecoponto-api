@@ -58,9 +58,16 @@ export class CreateDisposalUseCase {
       throw new AppError("Waste category not found", 404);
     }
 
-    const accepted = await this.disposalRepository.pointAcceptsCategory(point.id, category.id);
+    const receptionStatus = await this.disposalRepository.getPointCategoryReceptionStatus(
+      point.id,
+      category.id,
+    );
 
-    if (!accepted) {
+    if (receptionStatus === "PAUSED") {
+      throw new AppError("This collection point has paused reception for this waste category", 422);
+    }
+
+    if (receptionStatus === "NOT_ACCEPTED") {
       throw new AppError("This collection point does not accept this waste category", 422);
     }
 
