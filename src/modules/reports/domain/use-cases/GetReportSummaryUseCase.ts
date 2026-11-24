@@ -2,7 +2,7 @@ import type { ReportFilter, ReportSummary } from "../entities/Report";
 import type { IReportRepository } from "../repositories/IReportRepository";
 import { calculateCo2ForRows } from "../rules/co2-rules";
 import { round } from "../rules/number-rules";
-import { assertValidPeriod, previousPeriod } from "../rules/period-rules";
+import { assertValidPeriod, previousPeriod, toUtcRange } from "../rules/period-rules";
 
 export class GetReportSummaryUseCase {
   constructor(private readonly repository: IReportRepository) {}
@@ -19,6 +19,13 @@ export class GetReportSummaryUseCase {
       { ...filter, from: previous.from, to: previous.to },
       nameByCategoryId,
     );
+    // Platform-wide counts: like activePoints, they ignore the disposal filters (region, category).
+    const usersPeriod = toUtcRange(filter.from, filter.to);
+    const [activePoints, totalUsers, newUsers] = await Promise.all([
+      this.repository.countActivePoints(),
+      this.repository.countUsers(),
+      this.repository.countNewUsers(usersPeriod.gte, usersPeriod.lt),
+    ]);
 
     return {
       filter,
@@ -38,7 +45,8 @@ export class GetReportSummaryUseCase {
             : null,
       },
       co2: current.co2,
-      activePoints: { total: await this.repository.countActivePoints() },
+      activePoints: { total: activePoints },
+      users: { total: totalUsers, newInPeriod: newUsers },
     };
   }
 

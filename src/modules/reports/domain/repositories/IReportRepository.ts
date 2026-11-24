@@ -43,4 +43,6 @@ export interface IReportRepository {
   sumByPoint(filter: ReportFilter, categoryIds?: string[]): Promise<PointAggregate[]>;
   findPointsByIds(ids: string[]): Promise<PointDetail[]>;
   countActivePoints(): Promise<number>;
+  countUsers(): Promise<number>;
+  countNewUsers(from: Date, to: Date): Promise<number>;
 }

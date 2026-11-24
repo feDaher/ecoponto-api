@@ -53,12 +53,18 @@ export interface ActivePointsSummary {
   total: number;
 }
 
+export interface UsersSummary {
+  total: number;
+  newInPeriod: number;
+}
+
 export interface ReportSummary {
   filter: ReportFilter;
   totals: ReportTotals;
   comparison: Comparison;
   co2: Co2Summary;
   activePoints: ActivePointsSummary;
+  users: UsersSummary;
 }
 
 export interface CategoryRow {
