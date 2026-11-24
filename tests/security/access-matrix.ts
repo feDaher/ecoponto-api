@@ -55,6 +55,7 @@ export const ACCESS_MATRIX: Record<string, Access> = {
   "POST /collection-points": [COLLECTOR],
   "PUT /collection-points/:id": [COLLECTOR],
   "PATCH /collection-points/:id/review": [ADMIN],
+  "PATCH /collection-points/:id/materials/:categoryId": [COLLECTOR, ADMIN],
 
   "GET /collection-points/:collectionPointId/operating-hours": PUBLIC,
   "POST /collection-points/:collectionPointId/operating-hours": [COLLECTOR, ADMIN],

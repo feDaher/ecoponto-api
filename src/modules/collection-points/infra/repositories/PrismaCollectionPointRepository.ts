@@ -4,6 +4,7 @@ import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
 import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
 import type {
+  UpdateCollectionPointMaterialSettings,
   CollectionPointWriteData,
   CreateCollectionPointData,
   ICollectionPointRepository,
@@ -14,7 +15,14 @@ import { activeHoursInclude, formatHours } from "./operating-hours.include";
 const pointWithCategories = {
   categories: { include: { category: { select: { name: true } } } },
 } as const;
+const pointWithAcceptingCategories = {
+  categories: {
+    where: { isAccepting: true },
+    include: { category: { select: { name: true } } },
+  },
+} as const;
 const pointWithDetails = { ...pointWithCategories, ...activeHoursInclude };
+const publicPointWithDetails = { ...pointWithAcceptingCategories, ...activeHoursInclude };
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
@@ -107,11 +115,14 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         placeId: data.placeId,
         whatsappContact: data.whatsappContact,
         showWhatsappContact: data.showWhatsappContact,
+        // Diff the links instead of recreating them: categories kept on resubmission must keep
+        // their reception settings (BE-19) instead of silently going back to the defaults.
         categories: {
-          deleteMany: {},
-          create: data.categoryIds.map((categoryId) => ({
-            category: { connect: { id: categoryId } },
-          })),
+          deleteMany: { categoryId: { notIn: data.categoryIds } },
+          createMany: {
+            data: data.categoryIds.map((categoryId) => ({ categoryId })),
+            skipDuplicates: true,
+          },
         },
         status: CollectionPointStatus.PENDING,
         rejectionReason: null,
@@ -141,7 +152,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const point = await prisma.collectionPoint.findFirst({
       where: { id, status: CollectionPointStatus.APPROVED },
       omit: publicOmit,
-      include: pointWithDetails,
+      include: publicPointWithDetails,
     });
     return point ? toEntity(point) : null;
   }
@@ -151,6 +162,36 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       where: { id },
       select: { id: true, collectorId: true, status: true },
     });
+  }
+
+  async updateMaterialSettings(
+    pointId: string,
+    categoryId: string,
+    settings: UpdateCollectionPointMaterialSettings,
+  ) {
+    const { count } = await prisma.pointCategory.updateMany({
+      where: { pointId, categoryId },
+      data: {
+        ...(settings.capacityKg !== undefined && { capacityKg: settings.capacityKg }),
+        ...(settings.isAccepting !== undefined && { isAccepting: settings.isAccepting }),
+      },
+    });
+
+    if (count === 0) return null;
+
+    const material = await prisma.pointCategory.findUnique({
+      where: { pointId_categoryId: { pointId, categoryId } },
+      select: { capacityKg: true, isAccepting: true },
+    });
+
+    if (!material) return null;
+
+    return {
+      pointId,
+      categoryId,
+      capacityKg: material.capacityKg?.toNumber() ?? null,
+      isAccepting: material.isAccepting,
+    };
   }
 
   async listMine(collectorId: string) {

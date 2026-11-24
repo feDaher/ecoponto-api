@@ -27,12 +27,29 @@ export interface ReviewCollectionPointData {
 }
 export type CollectionPointSummary = Pick<CollectionPoint, "id" | "collectorId" | "status">;
 
+export interface CollectionPointMaterialSettings {
+  pointId: string;
+  categoryId: string;
+  capacityKg: number | null;
+  isAccepting: boolean;
+}
+
+export interface UpdateCollectionPointMaterialSettings {
+  capacityKg?: number | null;
+  isAccepting?: boolean;
+}
+
 export interface ICollectionPointRepository {
   create(data: CreateCollectionPointData): Promise<CollectionPoint>;
   update(id: string, data: CollectionPointWriteData): Promise<CollectionPoint>;
   review(id: string, data: ReviewCollectionPointData): Promise<CollectionPoint>;
   findApprovedById(id: string): Promise<CollectionPoint | null>;
   findSummaryById(id: string): Promise<CollectionPointSummary | null>;
+  updateMaterialSettings(
+    pointId: string,
+    categoryId: string,
+    settings: UpdateCollectionPointMaterialSettings,
+  ): Promise<CollectionPointMaterialSettings | null>;
   listMine(collectorId: string): Promise<CollectionPoint[]>;
   listPending(): Promise<CollectionPoint[]>;
 }
