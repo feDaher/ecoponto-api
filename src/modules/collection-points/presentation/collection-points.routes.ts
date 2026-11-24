@@ -25,6 +25,7 @@ import {
   updateMaterialSettings,
 } from "./collection-points.controller";
 import {
+  listCategoryReviews,
   listPendingCategories,
   reviewCategory,
   updateCategories,
@@ -308,8 +309,10 @@ collectionPointsRoutes.patch(
  *     summary: Change the accepted waste categories of a point without resubmitting it
  *     description: >
  *       Removed categories take effect immediately and the point stays approved and on the map.
- *       Added categories stay pending until an administrator approves them and only then count
- *       in the public search. The point must keep at least one approved category.
+ *       Categories added by the collector stay pending until an administrator approves them and
+ *       only then count in the public search; categories added by an administrator are approved
+ *       right away (and recorded in the review history). The point must keep at least one
+ *       approved category.
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
@@ -354,10 +357,46 @@ collectionPointsRoutes.put(
 
 /**
  * @openapi
+ * /collection-points/{id}/categories/reviews:
+ *   get:
+ *     summary: History of administrator decisions on the point's categories
+ *     description: >
+ *       Newest first, at most 100 entries. Includes approvals, rejections with their reason and
+ *       categories added directly by an administrator. Only the point owner or an administrator
+ *       may read it; reviewedBy is filled only for administrators (null for the collector).
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Decisions (id, categoryId, categoryName, decision, reason, reviewedAt, reviewedBy)
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not the owner of the point nor an administrator
+ *       404:
+ *         description: Point not found
+ */
+collectionPointsRoutes.get(
+  "/collection-points/:id/categories/reviews",
+  authenticate,
+  authorize(Role.COLLECTOR, Role.ADMIN),
+  listCategoryReviews,
+);
+
+/**
+ * @openapi
  * /collection-points/{id}/categories/{categoryId}/review:
  *   patch:
  *     summary: Approve or reject an added category (administrator only)
- *     description: Rejecting removes the link between the point and the category and requires a reason.
+ *     description: >
+ *       Rejecting removes the link between the point and the category and requires a reason
+ *       (max 500 chars). Every decision, with its reason, is kept in the category review history
+ *       (GET /collection-points/{id}/categories/reviews).
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     parameters:

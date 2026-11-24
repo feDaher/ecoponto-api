@@ -71,6 +71,11 @@ enum PointCategoryApprovalStatus {
   APPROVED
 }
 
+enum PointCategoryDecision {
+  APPROVED
+  REJECTED
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -83,12 +88,13 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  collectionPoints CollectionPoint[] @relation("CollectorPoints")
-  reviewedPoints   CollectionPoint[] @relation("ReviewedPoints")
+  collectionPoints CollectionPoint[]     @relation("CollectorPoints")
+  reviewedPoints   CollectionPoint[]     @relation("ReviewedPoints")
   collections      Collection[]
   disposalRecords  DisposalRecord[]
   reviews          Review[]
   auditLogs        AuditLog[]
+  categoryReviews  PointCategoryReview[] @relation("PointCategoryReviewer")
 
   @@index([createdAt])
 }
@@ -123,6 +129,7 @@ model CollectionPoint {
   collections     Collection[]
   disposalRecords DisposalRecord[]
   reviews         Review[]
+  categoryReviews PointCategoryReview[]
 
   @@index([status, name])
   @@index([status, city, name])
@@ -144,6 +151,7 @@ model WasteCategory {
 
   points          PointCategory[]
   disposalRecords DisposalRecord[]
+  pointReviews    PointCategoryReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,6 +177,28 @@ model PointCategory {
 
   @@id([pointId, categoryId])
   @@index([approvalStatus])
+}
+
+// Append-only log of every administrator decision on a point's category (BE-21): approvals,
+// rejections (with the mandatory reason) and categories added directly by an ADMIN. A rejection
+// deletes the PointCategory link, so this table is where the reason survives. Never updated.
+model PointCategoryReview {
+  id           String                @id @default(uuid())
+  pointId      String
+  categoryId   String
+  decision     PointCategoryDecision
+  reason       String?               @db.VarChar(500)
+  reviewedById String?
+  reviewedAt   DateTime              @default(now())
+
+  point      CollectionPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  category   WasteCategory   @relation(fields: [categoryId], references: [id])
+  // SetNull: removing a user (LGPD erasure) keeps the decision but drops who made it.
+  reviewedBy User?           @relation("PointCategoryReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([pointId, reviewedAt])
+  @@index([categoryId])
+  @@index([reviewedById])
 }
 
 model EducationalContent {

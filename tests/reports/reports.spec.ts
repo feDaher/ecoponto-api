@@ -14,6 +14,7 @@ import {
   fixtureDisposals,
   fixturePoints,
   groupByCategory,
+  groupByCitizen,
   groupByPoint,
 } from "./fixtures";
 
@@ -60,6 +61,7 @@ beforeEach(() => {
   );
 
   prisma.disposalRecord.groupBy.mockImplementation(async (args) => {
+    if (args.by.includes("citizenId")) return groupByCitizen(fixtureDisposals, args.where);
     const filtered = applyFilters(fixtureDisposals, args.where);
     return args.by.includes("categoryId") ? groupByCategory(filtered) : groupByPoint(filtered);
   });
@@ -77,7 +79,7 @@ describe("GET /reports/summary", () => {
     expect(response.body.comparison.variationPercent).toBe(187.8);
     expect(response.body.co2).toEqual({ avoidedKg: 678.26, treesSaved: 48 });
     expect(response.body.activePoints.total).toBe(18);
-    expect(response.body.users).toEqual({ total: 120, newInPeriod: 7 });
+    expect(response.body.users).toEqual({ scope: "platform", total: 120, newInPeriod: 7 });
   });
 
   it("counts new users inside the period in Brasília time", async () => {
@@ -358,5 +360,82 @@ describe("report access control", () => {
     const response = await request(app).get(`/reports/summary?${PERIOD}`);
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe("report data scope (COLLECTOR sees only their own points)", () => {
+  const asCollector = (path: string) => request(app).get(path).set(bearer(Role.COLLECTOR));
+
+  it("scopes the summary totals to the collector's points", async () => {
+    const admin = await request(app).get(`/reports/summary?${PERIOD}`).set(bearer(Role.ADMIN));
+    const collector = await asCollector(`/reports/summary?${PERIOD}`);
+
+    expect(admin.body.totals).toEqual({ disposals: 2, weightKg: 460.5, points: 160 });
+    // Only d1 (point-central) belongs to the collector; d4 is at another collector's point.
+    expect(collector.status).toBe(200);
+    expect(collector.body.totals).toEqual({ disposals: 1, weightKg: 340.5, points: 120 });
+    // The server-side scope never leaks into the echoed filter.
+    expect(collector.body.filter).toEqual({ from: FROM, to: TO });
+  });
+
+  it("counts only the collector's approved points as active", async () => {
+    await asCollector(`/reports/summary?${PERIOD}`);
+
+    expect(prisma.collectionPoint.count).toHaveBeenCalledWith({
+      where: { status: "APPROVED", collectorId: "user-collector" },
+    });
+  });
+
+  it("gives the collector the citizens who delivered at their points, not platform users", async () => {
+    const response = await asCollector(`/reports/summary?${PERIOD}`);
+
+    expect(response.body.users).toEqual({ scope: "collector", total: 1, newInPeriod: 1 });
+    expect(prisma.user.count).not.toHaveBeenCalled();
+    expect(prisma.disposalRecord.groupBy).toHaveBeenCalledWith({
+      by: ["citizenId"],
+      where: { status: "CONFIRMED", collectionPoint: { is: { collectorId: "user-collector" } } },
+      _min: { disposedAt: true },
+    });
+  });
+
+  it("does not count a returning citizen as new in a later period", async () => {
+    const response = await asCollector("/reports/summary?from=2025-11-01&to=2025-11-30");
+
+    expect(response.body.users).toEqual({ scope: "collector", total: 1, newInPeriod: 0 });
+  });
+
+  it("scopes the breakdowns, manifests and exports", async () => {
+    const byPoint = await asCollector(`/reports/by-point?${PERIOD}`);
+    const byCategory = await asCollector(`/reports/by-category?${PERIOD}`);
+    const manifests = await asCollector(`/reports/manifests?${PERIOD}`);
+    const exported = await asCollector(`/reports/export?${PERIOD}&scope=manifests&format=csv`);
+
+    expect(
+      byPoint.body.rows.map((row: { collectionPointId: string }) => row.collectionPointId),
+    ).toEqual(["point-central"]);
+    expect(byCategory.body.totalWeightKg).toBe(340.5);
+    expect(manifests.body.total).toBe(1);
+    expect(exported.status).toBe(200);
+    expect(exported.text).not.toContain("Drogaria Pacheco");
+  });
+
+  it("ignores a collectorId sent in the query string", async () => {
+    const collector = await asCollector(
+      `/reports/summary?${PERIOD}&collectorId=user-other-collector`,
+    );
+    const admin = await request(app)
+      .get(`/reports/summary?${PERIOD}&collectorId=user-collector`)
+      .set(bearer(Role.ADMIN));
+
+    expect(collector.body.totals.weightKg).toBe(340.5);
+    expect(admin.body.totals.weightKg).toBe(460.5);
+  });
+
+  it("lists only the cities of the collector's points as regions", async () => {
+    await asCollector("/reports/filter-options");
+
+    expect(prisma.collectionPoint.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { collectorId: "user-collector" }, distinct: ["city"] }),
+    );
   });
 });

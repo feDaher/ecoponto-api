@@ -1,4 +1,4 @@
-import type { ReportFilter, ReportSummary } from "../entities/Report";
+import type { ReportFilter, ReportSummary, UsersSummary } from "../entities/Report";
 import type { IReportRepository } from "../repositories/IReportRepository";
 import { calculateCo2ForRows } from "../rules/co2-rules";
 import { round } from "../rules/number-rules";
@@ -19,16 +19,17 @@ export class GetReportSummaryUseCase {
       { ...filter, from: previous.from, to: previous.to },
       nameByCategoryId,
     );
-    // Platform-wide counts: like activePoints, they ignore the disposal filters (region, category).
-    const usersPeriod = toUtcRange(filter.from, filter.to);
-    const [activePoints, totalUsers, newUsers] = await Promise.all([
-      this.repository.countActivePoints(),
-      this.repository.countUsers(),
-      this.repository.countNewUsers(usersPeriod.gte, usersPeriod.lt),
+    // Like activePoints, the user counts ignore the disposal filters (region, category, status)
+    // but follow the data scope: platform-wide for an ADMIN, own points for a COLLECTOR.
+    const [activePoints, users] = await Promise.all([
+      this.repository.countActivePoints(filter.collectorId),
+      this.summarizeUsers(filter),
     ]);
 
+    const { collectorId: _scope, ...requestFilter } = filter;
+
     return {
-      filter,
+      filter: requestFilter,
       totals: current.totals,
       comparison: {
         previousFrom: previous.from,
@@ -46,8 +47,27 @@ export class GetReportSummaryUseCase {
       },
       co2: current.co2,
       activePoints: { total: activePoints },
-      users: { total: totalUsers, newInPeriod: newUsers },
+      users,
     };
+  }
+
+  private async summarizeUsers(filter: ReportFilter): Promise<UsersSummary> {
+    const period = toUtcRange(filter.from, filter.to);
+
+    if (filter.collectorId) {
+      const reach = await this.repository.countCitizensAtCollector(
+        filter.collectorId,
+        period.gte,
+        period.lt,
+      );
+      return { scope: "collector", ...reach };
+    }
+
+    const [total, newInPeriod] = await Promise.all([
+      this.repository.countUsers(),
+      this.repository.countNewUsers(period.gte, period.lt),
+    ]);
+    return { scope: "platform", total, newInPeriod };
   }
 
   private async summarize(

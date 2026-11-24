@@ -7,6 +7,11 @@ export interface ReportFilter {
   region?: string;
   status?: DisposalStatus;
   search?: string;
+  /**
+   * Data scope set by the server from the authenticated user, never from the query string:
+   * a COLLECTOR only sees disposals made at their own collection points.
+   */
+  collectorId?: string;
 }
 
 export type ExportScope = "general" | "category" | "geospatial" | "manifests";
@@ -53,7 +58,13 @@ export interface ActivePointsSummary {
   total: number;
 }
 
+/**
+ * platform (ADMIN): every registered user / users created in the period.
+ * collector (COLLECTOR): distinct citizens with a CONFIRMED disposal at the collector's points /
+ * those whose first such disposal happened in the period. No personal data either way.
+ */
 export interface UsersSummary {
+  scope: "platform" | "collector";
   total: number;
   newInPeriod: number;
 }

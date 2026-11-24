@@ -32,6 +32,10 @@ function givenPoint(ownerId: string, links: ReturnType<typeof link>[]) {
 beforeEach(() => {
   resetPrismaMock();
   installIdentities();
+  // Interactive transactions run against the same mocked client.
+  prisma.$transaction.mockImplementation(async (work: unknown) =>
+    typeof work === "function" ? work(prisma) : Promise.all(work as Promise<unknown>[]),
+  );
 });
 
 describe("PUT /collection-points/:id/categories", () => {
@@ -69,6 +73,33 @@ describe("PUT /collection-points/:id/categories", () => {
       skipDuplicates: true,
     });
     expect(prisma.collectionPoint.update).not.toHaveBeenCalled();
+    expect(prisma.pointCategoryReview.createMany).not.toHaveBeenCalled();
+  });
+
+  it("adds a category as APPROVED when the admin adds it and logs the decision", async () => {
+    givenPoint(OTHER_COLLECTOR_ID, [link(plastic.id, "PLASTIC", "APPROVED")]);
+    prisma.wasteCategory.findMany.mockResolvedValue([plastic, glass]);
+
+    const response = await request(app)
+      .put(`/collection-points/${POINT_ID}/categories`)
+      .set(bearer(Role.ADMIN))
+      .send({ wasteCategories: ["PLASTIC", "GLASS"] });
+
+    expect(response.status).toBe(200);
+    expect(prisma.pointCategory.createMany).toHaveBeenCalledWith({
+      data: [{ pointId: POINT_ID, categoryId: glass.id, approvalStatus: "APPROVED" }],
+      skipDuplicates: true,
+    });
+    expect(prisma.pointCategoryReview.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          pointId: POINT_ID,
+          categoryId: glass.id,
+          decision: "APPROVED",
+          reviewedById: users[Role.ADMIN].id,
+        },
+      ],
+    });
   });
 
   it("answers 422 when the point would be left without an approved category", async () => {
@@ -180,6 +211,15 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       where: { pointId: POINT_ID, categoryId: glass.id, approvalStatus: "PENDING" },
       data: { approvalStatus: "APPROVED" },
     });
+    expect(prisma.pointCategoryReview.create).toHaveBeenCalledWith({
+      data: {
+        pointId: POINT_ID,
+        categoryId: glass.id,
+        decision: "APPROVED",
+        reason: null,
+        reviewedById: users[Role.ADMIN].id,
+      },
+    });
   });
 
   it("rejects a pending category by removing the link", async () => {
@@ -195,6 +235,16 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
     expect(prisma.pointCategory.deleteMany).toHaveBeenCalledWith({
       where: { pointId: POINT_ID, categoryId: glass.id, approvalStatus: "PENDING" },
     });
+    // The link is gone, so the reason must survive in the review history.
+    expect(prisma.pointCategoryReview.create).toHaveBeenCalledWith({
+      data: {
+        pointId: POINT_ID,
+        categoryId: glass.id,
+        decision: "REJECTED",
+        reason: "Não aceitamos vidro",
+        reviewedById: users[Role.ADMIN].id,
+      },
+    });
   });
 
   it("answers 409 when another admin reviewed the category first", async () => {
@@ -207,6 +257,7 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
       .send({ status: "APPROVED" });
 
     expect(response.status).toBe(409);
+    expect(prisma.pointCategoryReview.create).not.toHaveBeenCalled();
   });
 
   it("rejects an oversized rejection reason", async () => {
@@ -259,5 +310,78 @@ describe("PATCH /collection-points/:id/categories/:categoryId/review", () => {
 
     expect(response.status).toBe(403);
     expect(prisma.pointCategory.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /collection-points/:id/categories/reviews", () => {
+  const url = `/collection-points/${POINT_ID}/categories/reviews`;
+  const history = [
+    {
+      id: "rev-2",
+      pointId: POINT_ID,
+      categoryId: glass.id,
+      decision: "REJECTED",
+      reason: "Não aceitamos vidro",
+      reviewedById: users[Role.ADMIN].id,
+      reviewedAt: new Date("2026-11-20T12:00:00.000Z"),
+      category: { name: "GLASS" },
+      reviewedBy: { id: users[Role.ADMIN].id, name: "Admin" },
+    },
+  ];
+
+  it("shows the owner the decision and the reason, but not who decided", async () => {
+    givenPoint(users[Role.COLLECTOR].id, []);
+    prisma.pointCategoryReview.findMany.mockResolvedValue(history);
+
+    const response = await request(app).get(url).set(bearer(Role.COLLECTOR));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      {
+        id: "rev-2",
+        categoryId: glass.id,
+        categoryName: "GLASS",
+        decision: "REJECTED",
+        reason: "Não aceitamos vidro",
+        reviewedAt: "2026-11-20T12:00:00.000Z",
+        reviewedBy: null,
+      },
+    ]);
+    expect(prisma.pointCategoryReview.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { pointId: POINT_ID },
+        orderBy: [{ reviewedAt: "desc" }, { id: "desc" }],
+        take: 100,
+      }),
+    );
+  });
+
+  it("shows the admin who decided", async () => {
+    givenPoint(OTHER_COLLECTOR_ID, []);
+    prisma.pointCategoryReview.findMany.mockResolvedValue(history);
+
+    const response = await request(app).get(url).set(bearer(Role.ADMIN));
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].reviewedBy).toEqual({ id: users[Role.ADMIN].id, name: "Admin" });
+  });
+
+  it("answers 403 to another collector and to a citizen", async () => {
+    givenPoint(OTHER_COLLECTOR_ID, []);
+
+    const collector = await request(app).get(url).set(bearer(Role.COLLECTOR));
+    const citizen = await request(app).get(url).set(bearer(Role.CITIZEN));
+
+    expect(collector.status).toBe(403);
+    expect(citizen.status).toBe(403);
+    expect(prisma.pointCategoryReview.findMany).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for an unknown point", async () => {
+    prisma.collectionPoint.findUnique.mockResolvedValue(null);
+
+    const response = await request(app).get(url).set(bearer(Role.ADMIN));
+
+    expect(response.status).toBe(404);
   });
 });
