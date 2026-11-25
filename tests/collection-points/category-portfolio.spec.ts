@@ -13,10 +13,17 @@ const OTHER_COLLECTOR_ID = "user-other-collector";
 const plastic = { id: "cat-plastic", name: "PLASTIC", active: true };
 const glass = { id: "cat-glass", name: "GLASS", active: true };
 
-const link = (categoryId: string, name: string, approvalStatus: "APPROVED" | "PENDING") => ({
+const link = (
+  categoryId: string,
+  name: string,
+  approvalStatus: "APPROVED" | "PENDING",
+  settings: { isAccepting?: boolean; capacityKg?: { toNumber(): number } | null } = {},
+) => ({
   pointId: POINT_ID,
   categoryId,
   approvalStatus,
+  isAccepting: settings.isAccepting ?? true,
+  capacityKg: settings.capacityKg ?? null,
   category: { name },
 });
 
@@ -100,6 +107,33 @@ describe("PUT /collection-points/:id/categories", () => {
         },
       ],
     });
+  });
+
+  it("returns each link's material settings, so a paused category is not shown as receiving", async () => {
+    givenPoint(users[Role.COLLECTOR].id, [
+      link(plastic.id, "PLASTIC", "APPROVED", {
+        isAccepting: false,
+        capacityKg: { toNumber: () => 120.25 },
+      }),
+    ]);
+    prisma.wasteCategory.findMany.mockResolvedValue([plastic]);
+
+    const response = await request(app)
+      .put(`/collection-points/${POINT_ID}/categories`)
+      .set(bearer(Role.COLLECTOR))
+      .send({ wasteCategories: ["PLASTIC"] });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      {
+        pointId: POINT_ID,
+        categoryId: plastic.id,
+        categoryName: "PLASTIC",
+        approvalStatus: "APPROVED",
+        isAccepting: false,
+        capacityKg: 120.25,
+      },
+    ]);
   });
 
   it("answers 422 when the point would be left without an approved category", async () => {

@@ -42,6 +42,7 @@ export interface CollectionPointCategoryApproval {
   name: string;
   approvalStatus: "PENDING" | "APPROVED";
   isAccepting: boolean;
+  capacityKg: number | null;
 }
 export interface CollectionPointDraft {
   name: string;
