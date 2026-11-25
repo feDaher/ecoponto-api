@@ -213,6 +213,7 @@ describe("collection point category persistence", () => {
             categoryId: "category-glass",
             approvalStatus: "APPROVED",
             isAccepting: false,
+            capacityKg: { toNumber: () => 250.5 },
             category: { name: "GLASS" },
           },
         ],
@@ -228,12 +229,14 @@ describe("collection point category persistence", () => {
         name: "GLASS",
         approvalStatus: "APPROVED",
         isAccepting: false,
+        capacityKg: 250.5,
       },
       {
         categoryId: "category-plastic",
         name: "PLASTIC",
         approvalStatus: "PENDING",
         isAccepting: true,
+        capacityKg: null,
       },
     ]);
   });

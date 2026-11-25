@@ -219,6 +219,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
           name: link.category.name,
           approvalStatus: link.approvalStatus,
           isAccepting: link.isAccepting,
+          capacityKg: link.capacityKg?.toNumber() ?? null,
         }))
         .sort((a, b) => a.name.localeCompare(b.name)),
     }));
@@ -246,7 +247,15 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       include: { category: { select: { name: true } } },
     });
     return rows.map(
-      (r) => new PointCategory(r.pointId, r.categoryId, r.category.name, r.approvalStatus),
+      (r) =>
+        new PointCategory(
+          r.pointId,
+          r.categoryId,
+          r.category.name,
+          r.approvalStatus,
+          r.isAccepting,
+          r.capacityKg?.toNumber() ?? null,
+        ),
     );
   }
 

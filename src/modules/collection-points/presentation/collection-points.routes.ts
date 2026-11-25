@@ -113,7 +113,8 @@ collectionPointsRoutes.get(
  *       200:
  *         description: >
  *           The collector's points, including moderation status. Besides wasteCategories (codes),
- *           each point has categoryApprovals [{ categoryId, name, approvalStatus, isAccepting }],
+ *           each point has categoryApprovals [{ categoryId, name, approvalStatus, isAccepting,
+ *           capacityKg }],
  *           so the owner can tell approved categories from those still pending (BE-21).
  *       401:
  *         description: Missing, invalid or expired token
@@ -338,7 +339,9 @@ collectionPointsRoutes.patch(
  *                 items: { type: string, example: PLASTIC }
  *     responses:
  *       200:
- *         description: The point's categories with their approval status
+ *         description: >
+ *           The point's categories as [{ pointId, categoryId, categoryName, approvalStatus,
+ *           isAccepting, capacityKg }] (capacityKg null = no limit)
  *       400:
  *         description: Malformed body, repeated codes or unknown/inactive category
  *       401:
