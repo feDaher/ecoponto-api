@@ -88,6 +88,7 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  collectorProfile CollectorProfile?
   collectionPoints CollectionPoint[]     @relation("CollectorPoints")
   reviewedPoints   CollectionPoint[]     @relation("ReviewedPoints")
   collections      Collection[]
@@ -97,6 +98,20 @@ model User {
   categoryReviews  PointCategoryReview[] @relation("PointCategoryReviewer")
 
   @@index([createdAt])
+}
+
+// Registration data of a collector (INT-08), 1:1 with a User whose role is COLLECTOR.
+// The full CPF/CNPJ is never stored: only a masked version for display and a keyed hash (HMAC)
+// used to reject a document that is already registered. `state` is the UF.
+model CollectorProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentMasked String   @db.VarChar(14) //CNPJ ou CPF
+  state          String   @db.VarChar(2) //UF
+  tradeName      String?  @db.VarChar(191)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model CollectionPoint {
