@@ -11,6 +11,13 @@ export interface CollectionPointHour extends CollectionPointOperatingHours {
   id: string;
   isActive: boolean;
 }
+export interface CollectionPointCategory {
+  id: string; // categoryId
+  name: string;
+  approvalStatus: "PENDING" | "APPROVED";
+  isAccepting: boolean;
+  capacityKg: number | null;
+}
 export interface CollectionPoint {
   id: string;
   collectorId: string;
@@ -34,6 +41,7 @@ export interface CollectionPoint {
   createdAt: Date;
   updatedAt: Date;
   wasteCategories: string[];
+  categories?: CollectionPointCategory[];
   collector?: { id: string; name: string; email: string };
 }
 export interface CollectionPointDraft {

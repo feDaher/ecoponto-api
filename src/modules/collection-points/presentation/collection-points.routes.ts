@@ -107,11 +107,19 @@ collectionPointsRoutes.get(
  * /collection-points/mine:
  *   get:
  *     summary: List the authenticated collector's points
+ *     description: >
+ *       Oldest point first (createdAt ascending), so the first item is always the same.
+ *       An empty array means the collector has no point yet. Each point carries its active
+ *       operating hours (`hours`), `hoursConfirmedAt` and `isOutdated`, plus two category fields:
+ *       `wasteCategories` (names, sorted) and `categories` (owner-only detail with `id`, `name`,
+ *       `approvalStatus` PENDING | APPROVED, `isAccepting` and `capacityKg`). A category added
+ *       by the collector shows as PENDING until an administrator decides; if it is rejected the
+ *       link is removed and it disappears from the list.
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: The collector's points, including moderation status
+ *         description: The collector's points, including moderation status and per-category approval status
  *       401:
  *         description: Missing, invalid or expired token
  *       403:

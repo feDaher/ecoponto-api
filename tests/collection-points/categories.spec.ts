@@ -185,17 +185,61 @@ describe("collection point category persistence", () => {
     );
   });
 
-  it.each([
-    ["mine", Role.COLLECTOR, "/collection-points/mine"],
-    ["pending admin", Role.ADMIN, "/collection-points/admin/pending"],
-  ])("returns category codes for the %s list", async (_label, role, path) => {
+  it("returns category codes for the pending admin list", async () => {
     prisma.collectionPoint.findMany.mockResolvedValue([pointWithCategories(["PLASTIC", "GLASS"])]);
 
-    const response = await request(app).get(path).set(bearer(role));
+    const response = await request(app)
+      .get("/collection-points/admin/pending")
+      .set(bearer(Role.ADMIN));
 
     expect(response.status).toBe(200);
     expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
     expect(response.body[0]).not.toHaveProperty("categories");
+  });
+
+  it("returns category codes and per-category state for the mine list", async () => {
+    prisma.collectionPoint.findMany.mockResolvedValue([
+      {
+        ...pointWithCategories(["PLASTIC", "GLASS"]),
+        categories: [
+          {
+            categoryId: "category-plastic",
+            approvalStatus: "APPROVED",
+            isAccepting: true,
+            capacityKg: null,
+            category: { name: "PLASTIC" },
+          },
+          {
+            categoryId: "category-glass",
+            approvalStatus: "PENDING",
+            isAccepting: false,
+            capacityKg: null,
+            category: { name: "GLASS" },
+          },
+        ],
+      },
+    ]);
+
+    const response = await request(app).get("/collection-points/mine").set(bearer(Role.COLLECTOR));
+
+    expect(response.status).toBe(200);
+    expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
+    expect(response.body[0].categories).toEqual([
+      {
+        id: "category-glass",
+        name: "GLASS",
+        approvalStatus: "PENDING",
+        isAccepting: false,
+        capacityKg: null,
+      },
+      {
+        id: "category-plastic",
+        name: "PLASTIC",
+        approvalStatus: "APPROVED",
+        isAccepting: true,
+        capacityKg: null,
+      },
+    ]);
   });
 
   it("rejects an inactive or unknown wasteType filter", async () => {
