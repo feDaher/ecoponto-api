@@ -108,18 +108,17 @@ collectionPointsRoutes.get(
  *   get:
  *     summary: List the authenticated collector's points
  *     description: >
- *       Oldest point first (createdAt ascending), so the first item is always the same.
- *       An empty array means the collector has no point yet. Each point carries its active
- *       operating hours (`hours`), `hoursConfirmedAt` and `isOutdated`, plus two category fields:
- *       `wasteCategories` (names, sorted) and `categories` (owner-only detail with `id`, `name`,
- *       `approvalStatus` PENDING | APPROVED, `isAccepting` and `capacityKg`). A category added
- *       by the collector shows as PENDING until an administrator decides; if it is rejected the
- *       link is removed and it disappears from the list.
+ *       Oldest point first (createdAt ascending), so the first item stays the same when another
+ *       point is edited. An empty array means the collector has no point yet.
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: The collector's points, including moderation status and per-category approval status
+ *         description: >
+ *           The collector's points, including moderation status. Besides wasteCategories (codes),
+ *           each point has categoryApprovals [{ categoryId, name, approvalStatus, isAccepting,
+ *           capacityKg }],
+ *           so the owner can tell approved categories from those still pending (BE-21).
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
@@ -343,7 +342,9 @@ collectionPointsRoutes.patch(
  *                 items: { type: string, example: PLASTIC }
  *     responses:
  *       200:
- *         description: The point's categories with their approval status
+ *         description: >
+ *           The point's categories as [{ pointId, categoryId, categoryName, approvalStatus,
+ *           isAccepting, capacityKg }] (capacityKg null = no limit)
  *       400:
  *         description: Malformed body, repeated codes or unknown/inactive category
  *       401:

@@ -6,10 +6,7 @@ import {
 } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
-import type {
-  CollectionPoint,
-  CollectionPointCategory,
-} from "../../domain/entities/CollectionPoint";
+import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
 import { PointCategory } from "../../domain/entities/PointCategory";
 import type {
   UpdateCollectionPointMaterialSettings,
@@ -83,20 +80,6 @@ function toEntity(row: PointRow): CollectionPoint {
     wasteCategories: row.categories.map(({ category }) => category.name).sort(),
     ...(row.collector && { collector: row.collector }),
   };
-}
-
-// Category state (approval, reception settings) is owner-only data: only listMine uses it,
-// so the public responses built by toEntity never expose it.
-function toCategoryStates(row: PointRow): CollectionPointCategory[] {
-  return row.categories
-    .map(({ categoryId, category, approvalStatus, isAccepting, capacityKg }) => ({
-      id: categoryId,
-      name: category.name,
-      approvalStatus,
-      isAccepting,
-      capacityKg: capacityKg?.toNumber() ?? null,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export class PrismaCollectionPointRepository implements ICollectionPointRepository {
@@ -224,10 +207,22 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
   async listMine(collectorId: string) {
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: pointWithDetails,
     });
-    return points.map((point) => ({ ...toEntity(point), categories: toCategoryStates(point) }));
+    // The owner needs to tell approved categories from those still waiting for an admin (BE-21).
+    return points.map((row) => ({
+      ...toEntity(row),
+      categoryApprovals: row.categories
+        .map((link) => ({
+          categoryId: link.categoryId,
+          name: link.category.name,
+          approvalStatus: link.approvalStatus,
+          isAccepting: link.isAccepting,
+          capacityKg: link.capacityKg?.toNumber() ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
   }
 
   async listPending() {
@@ -252,7 +247,15 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       include: { category: { select: { name: true } } },
     });
     return rows.map(
-      (r) => new PointCategory(r.pointId, r.categoryId, r.category.name, r.approvalStatus),
+      (r) =>
+        new PointCategory(
+          r.pointId,
+          r.categoryId,
+          r.category.name,
+          r.approvalStatus,
+          r.isAccepting,
+          r.capacityKg?.toNumber() ?? null,
+        ),
     );
   }
 

@@ -185,35 +185,35 @@ describe("collection point category persistence", () => {
     );
   });
 
-  it("returns category codes for the pending admin list", async () => {
+  it.each([
+    ["mine", Role.COLLECTOR, "/collection-points/mine"],
+    ["pending admin", Role.ADMIN, "/collection-points/admin/pending"],
+  ])("returns category codes for the %s list", async (_label, role, path) => {
     prisma.collectionPoint.findMany.mockResolvedValue([pointWithCategories(["PLASTIC", "GLASS"])]);
 
-    const response = await request(app)
-      .get("/collection-points/admin/pending")
-      .set(bearer(Role.ADMIN));
+    const response = await request(app).get(path).set(bearer(role));
 
     expect(response.status).toBe(200);
     expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
     expect(response.body[0]).not.toHaveProperty("categories");
   });
 
-  it("returns category codes and per-category state for the mine list", async () => {
+  it("tells the owner which categories are still pending in the mine list", async () => {
     prisma.collectionPoint.findMany.mockResolvedValue([
       {
-        ...pointWithCategories(["PLASTIC", "GLASS"]),
+        ...pointWithCategories([]),
         categories: [
           {
             categoryId: "category-plastic",
-            approvalStatus: "APPROVED",
+            approvalStatus: "PENDING",
             isAccepting: true,
-            capacityKg: null,
             category: { name: "PLASTIC" },
           },
           {
             categoryId: "category-glass",
-            approvalStatus: "PENDING",
+            approvalStatus: "APPROVED",
             isAccepting: false,
-            capacityKg: null,
+            capacityKg: { toNumber: () => 250.5 },
             category: { name: "GLASS" },
           },
         ],
@@ -223,23 +223,48 @@ describe("collection point category persistence", () => {
     const response = await request(app).get("/collection-points/mine").set(bearer(Role.COLLECTOR));
 
     expect(response.status).toBe(200);
-    expect(response.body[0].wasteCategories).toEqual(["GLASS", "PLASTIC"]);
-    expect(response.body[0].categories).toEqual([
+    expect(response.body[0].categoryApprovals).toEqual([
       {
-        id: "category-glass",
+        categoryId: "category-glass",
         name: "GLASS",
-        approvalStatus: "PENDING",
+        approvalStatus: "APPROVED",
         isAccepting: false,
-        capacityKg: null,
+        capacityKg: 250.5,
       },
       {
-        id: "category-plastic",
+        categoryId: "category-plastic",
         name: "PLASTIC",
-        approvalStatus: "APPROVED",
+        approvalStatus: "PENDING",
         isAccepting: true,
         capacityKg: null,
       },
     ]);
+  });
+
+  it("keeps categoryApprovals out of the admin pending list", async () => {
+    prisma.collectionPoint.findMany.mockResolvedValue([pointWithCategories(["PLASTIC"])]);
+
+    const response = await request(app)
+      .get("/collection-points/admin/pending")
+      .set(bearer(Role.ADMIN));
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).not.toHaveProperty("categoryApprovals");
+  });
+
+  it("lists the collector's points oldest first, so the first point is stable", async () => {
+    prisma.collectionPoint.findMany.mockResolvedValue([]);
+
+    const response = await request(app).get("/collection-points/mine").set(bearer(Role.COLLECTOR));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(prisma.collectionPoint.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { collectorId: users[Role.COLLECTOR].id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
   });
 
   it("rejects an inactive or unknown wasteType filter", async () => {
