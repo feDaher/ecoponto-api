@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const MAX_TEXT = 191;
+const MAX_NICKNAME = 60;
 const PERSON_TEXT = /^[\p{L}\s'.-]+$/u;
 const PHONE_MASK = /^[\d\s().-]*$/;
 
@@ -36,6 +37,34 @@ export const updateOwnProfileSchema = z.strictObject({
         .max(MAX_TEXT, "A cidade pode ter no máximo 191 caracteres")
         .regex(PERSON_TEXT, "A cidade deve conter apenas letras, espaços e os caracteres ' . -"),
     ),
+  nickname: z
+    .string({ error: "O apelido deve ser um texto" })
+    .transform(collapseSpaces)
+    .pipe(
+      z.union([
+        z.literal(""),
+        z
+          .string()
+          .max(MAX_NICKNAME, "O apelido pode ter no máximo 60 caracteres")
+          .regex(PERSON_TEXT, "O apelido deve conter apenas letras, espaços e os caracteres ' . -"),
+      ]),
+    )
+    .transform((nickname) => (nickname === "" ? null : nickname))
+    .nullable()
+    .optional(),
+  preferences: z
+    .strictObject({
+      collectionAlerts: z
+        .boolean({ error: "Os alertas de coleta devem ser verdadeiro ou falso" })
+        .optional(),
+      monthlyReports: z
+        .boolean({ error: "O relatório mensal deve ser verdadeiro ou falso" })
+        .optional(),
+      cooperativeContact: z
+        .boolean({ error: "O contato de cooperativas deve ser verdadeiro ou falso" })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type UpdateOwnProfileInput = z.output<typeof updateOwnProfileSchema>;

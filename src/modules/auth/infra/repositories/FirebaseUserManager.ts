@@ -15,6 +15,14 @@ export class FirebaseUserManager implements IFirebaseUserManager {
     await firebaseAuth.updateUser(firebaseUid, { disabled });
   }
 
+  async updatePassword(firebaseUid: string, password: string): Promise<void> {
+    await firebaseAuth.updateUser(firebaseUid, { password });
+  }
+
+  async revokeSessions(firebaseUid: string): Promise<void> {
+    await firebaseAuth.revokeRefreshTokens(firebaseUid);
+  }
+
   async deleteUser(firebaseUid: string): Promise<void> {
     try {
       await firebaseAuth.deleteUser(firebaseUid);

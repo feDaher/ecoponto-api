@@ -59,6 +59,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     phone: user.phone,
     city: user.city,
     createdAt: user.createdAt,
+    nickname: user.nickname,
+    preferences: {
+      collectionAlerts: user.notifyCollectionAlerts,
+      monthlyReports: user.notifyMonthlyReports,
+      cooperativeContact: user.allowCooperativeContact,
+    },
   };
   res.locals.requestParams = { ...req.params };
 

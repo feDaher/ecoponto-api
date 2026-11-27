@@ -15,6 +15,11 @@ const target: User = {
   city: "Manhuacu",
   role: Role.CITIZEN,
   isBlocked: false,
+  nickname: null,
+  notifyCollectionAlerts: true,
+  notifyMonthlyReports: true,
+  allowCooperativeContact: false,
+  cooperativeContactConsentAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -37,6 +42,8 @@ const firebaseManager = () =>
   ({
     setDisabled: jest.fn(async (_firebaseUid: string, _disabled: boolean) => undefined),
     deleteUser: jest.fn(async (_firebaseUid: string) => undefined),
+    updatePassword: jest.fn(async (_firebaseUid: string, _password: string) => undefined),
+    revokeSessions: jest.fn(async (_firebaseUid: string) => undefined),
   }) as jest.Mocked<IFirebaseUserManager>;
 
 describe("UpdateUserRoleUseCase", () => {

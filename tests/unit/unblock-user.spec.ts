@@ -22,6 +22,11 @@ describe("UnblockUserUseCase", () => {
       city: "Manhuacu",
       role: Role.CITIZEN,
       isBlocked: true,
+      nickname: null,
+      notifyCollectionAlerts: true,
+      notifyMonthlyReports: true,
+      allowCooperativeContact: false,
+      cooperativeContactConsentAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -60,6 +65,8 @@ describe("UnblockUserUseCase", () => {
         throw new Error("Simulated Firebase failure");
       }),
       deleteUser: jest.fn(async (_firebaseUid: string) => {}),
+      updatePassword: jest.fn(async (_firebaseUid: string, _password: string) => {}),
+      revokeSessions: jest.fn(async (_firebaseUid: string) => {}),
     } satisfies IFirebaseUserManager;
 
     const useCase = new UnblockUserUseCase(userRepository, firebaseUserManager);

@@ -100,6 +100,32 @@ export const swaggerSpec = swaggerJsdoc({
     },
     components: {
       schemas: {
+        UserProfile: {
+          type: "object",
+          description:
+            "User as returned by login, refresh, register, change-password and PATCH /users/me.",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            firebaseUid: { type: "string" },
+            name: { type: "string", example: "Maria da Silva" },
+            email: { type: "string", format: "email" },
+            phone: { type: "string", example: "33999999999" },
+            city: { type: "string", example: "Manhuaçu" },
+            role: { type: "string", enum: ["CITIZEN", "COLLECTOR", "ADMIN"] },
+            isBlocked: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+            nickname: { type: "string", nullable: true, maxLength: 60, example: "Mari" },
+            preferences: {
+              type: "object",
+              properties: {
+                collectionAlerts: { type: "boolean", example: true },
+                monthlyReports: { type: "boolean", example: true },
+                cooperativeContact: { type: "boolean", example: false },
+              },
+            },
+          },
+        },
         CollectionPointInput: {
           type: "object",
           required: ["name", "city", "address", "wasteCategories", "operatingHours"],

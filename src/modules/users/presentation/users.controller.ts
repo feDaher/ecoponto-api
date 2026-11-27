@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { AppError } from "../../../shared/errors/AppError";
 import { PrismaUserRepository } from "../../auth/infra/repositories/PrismaUserRepository";
+import { toUserResponse } from "../../auth/presentation/user.presenter";
 import { FirebaseUserManager } from "../../auth/infra/repositories/FirebaseUserManager";
 import { BlockUserUseCase } from "../domain/use-cases/BlockUserUseCase";
 import { UnblockUserUseCase } from "../domain/use-cases/UnblockUserUseCase";
@@ -105,7 +106,7 @@ export async function updateOwnProfile(
 
   const user = await updateOwnProfileUseCase.execute(req.user.id, req.body);
 
-  res.status(200).json(user);
+  res.status(200).json(toUserResponse(user));
 }
 
 export async function deleteOwnAccount(req: Request, res: Response) {

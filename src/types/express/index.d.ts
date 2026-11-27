@@ -13,6 +13,12 @@ declare global {
         phone?: string;
         city?: string;
         createdAt?: Date;
+        nickname?: string | null;
+        preferences?: {
+          collectionAlerts: boolean;
+          monthlyReports: boolean;
+          cooperativeContact: boolean;
+        };
       };
     }
 

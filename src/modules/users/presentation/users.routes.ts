@@ -51,9 +51,28 @@ export const usersRoutes = Router();
  *                 minLength: 2
  *                 maxLength: 191
  *                 example: Manhuaçu
+ *               nickname:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 60
+ *                 example: Mari
+ *                 description: Optional. Letters, spaces and ' . - only; "" or null clears it; omitted keeps it
+ *               preferences:
+ *                 type: object
+ *                 additionalProperties: false
+ *                 description: >
+ *                   Optional and partial: only the sent keys change. Turning cooperativeContact on
+ *                   records the consent date (LGPD) the first time; turning it off clears it.
+ *                 properties:
+ *                   collectionAlerts: { type: boolean }
+ *                   monthlyReports: { type: boolean }
+ *                   cooperativeContact: { type: boolean }
  *     responses:
  *       200:
  *         description: Updated user, in the same shape as the user returned by POST /auth/login
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/UserProfile' }
  *       400:
  *         description: Invalid field or unknown field (e.g. email, role)
  *       401:

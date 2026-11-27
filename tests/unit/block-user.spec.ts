@@ -22,6 +22,11 @@ describe("BlockUserUseCase", () => {
       city: "Manhuacu",
       role: Role.CITIZEN,
       isBlocked: false,
+      nickname: null,
+      notifyCollectionAlerts: true,
+      notifyMonthlyReports: true,
+      allowCooperativeContact: false,
+      cooperativeContactConsentAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -55,6 +60,8 @@ describe("BlockUserUseCase", () => {
     const firebaseUserManager = {
       setDisabled: jest.fn(async (_firebaseUid: string, _disabled: boolean) => {}),
       deleteUser: jest.fn(async (_firebaseUid: string) => {}),
+      updatePassword: jest.fn(async (_firebaseUid: string, _password: string) => {}),
+      revokeSessions: jest.fn(async (_firebaseUid: string) => {}),
     } satisfies IFirebaseUserManager;
 
     const useCase = new BlockUserUseCase(userRepository, firebaseUserManager);
