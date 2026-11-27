@@ -25,6 +25,7 @@ export async function publishReview(req: Request, res: Response) {
     rating: req.body.rating,
     comment: req.body.comment,
   });
+  res.locals.auditResourceId = review.id;
 
   res.status(created ? 201 : 200).json(review);
 }

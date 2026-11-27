@@ -46,6 +46,10 @@ function toPublicReview({ citizen, ...row }: PublicRow): PublicReview {
   return { ...row, authorName: toPublicAuthorName(citizen.name) };
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
 export class PrismaReviewRepository implements IReviewRepository {
   async isCollectionPointPublic(collectionPointId: string) {
     const point = await prisma.collectionPoint.findFirst({
@@ -85,11 +89,38 @@ export class PrismaReviewRepository implements IReviewRepository {
   }
 
   async create({ citizenId, collectionPointId, rating, comment }: NewReview) {
-    const row = await prisma.review.create({
-      data: { citizenId, collectionPointId, rating, comment },
-      select: publicSelect,
-    });
-    return toPublicReview(row);
+    try {
+      const row = await prisma.review.create({
+        data: { citizenId, collectionPointId, rating, comment },
+        select: publicSelect,
+      });
+
+      return {
+        review: toPublicReview(row),
+        created: true,
+      };
+    } catch (error: unknown) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      // RB12: outra requisição pode ter criado a avaliação simultaneamente.
+      const ownReviewId = await this.findOwnReviewId(citizenId, collectionPointId);
+
+      if (!ownReviewId) {
+        throw error;
+      }
+
+      const review = await this.updateContent(ownReviewId, {
+        rating,
+        comment,
+      });
+
+      return {
+        review,
+        created: false,
+      };
+    }
   }
 
   async updateContent(id: string, { rating, comment }: Pick<NewReview, "rating" | "comment">) {
