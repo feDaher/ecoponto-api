@@ -205,6 +205,15 @@ describe("PATCH /users/me", () => {
 });
 
 describe("DELETE /users/me", () => {
+  it("drops the cooperative profile (contact e-mail, CNPJ) inside the anonymization", async () => {
+    const response = await request(app).delete("/users/me").set(bearer(Role.COLLECTOR));
+
+    expect(response.status).toBe(204);
+    expect(prisma.cooperativeProfile.deleteMany).toHaveBeenCalledWith({
+      where: { collectorId: users[Role.COLLECTOR].id },
+    });
+  });
+
   it("anonymizes the user, blocks it and deletes the Firebase login", async () => {
     const response = await request(app).delete("/users/me").set(bearer(Role.CITIZEN));
 

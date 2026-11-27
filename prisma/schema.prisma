@@ -88,13 +88,14 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  collectionPoints CollectionPoint[]     @relation("CollectorPoints")
-  reviewedPoints   CollectionPoint[]     @relation("ReviewedPoints")
-  collections      Collection[]
-  disposalRecords  DisposalRecord[]
-  reviews          Review[]
-  auditLogs        AuditLog[]
-  categoryReviews  PointCategoryReview[] @relation("PointCategoryReviewer")
+  collectionPoints   CollectionPoint[]     @relation("CollectorPoints")
+  cooperativeProfile CooperativeProfile?
+  reviewedPoints     CollectionPoint[]     @relation("ReviewedPoints")
+  collections        Collection[]
+  disposalRecords    DisposalRecord[]
+  reviews            Review[]
+  auditLogs          AuditLog[]
+  categoryReviews    PointCategoryReview[] @relation("PointCategoryReviewer")
 
   @@index([createdAt])
 }
@@ -125,6 +126,7 @@ model CollectionPoint {
 
   categories      PointCategory[]
   hours           OperatingHours[]
+  configuration   CollectionPointConfiguration?
   geolocation     Geolocation?
   collections     Collection[]
   disposalRecords DisposalRecord[]
@@ -323,10 +325,10 @@ model Review {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
+  @@unique([citizenId, collectionPointId])
   @@index([citizenId])
   @@index([collectionPointId])
   @@index([collectionPointId, createdAt])
-  @@unique([citizenId, collectionPointId])
 }
 
 model AuditLog {
@@ -355,4 +357,28 @@ model PlacesApiUsage {
   updatedAt DateTime @updatedAt
 
   @@id([sku, day])
+}
+
+model CollectionPointConfiguration {
+  collectionPointId String          @id
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id], onDelete: Cascade)
+  street            String
+  streetNumber      String          @db.VarChar(20)
+  neighborhood      String
+  state             String          @db.Char(2)
+  postalCode        String          @db.VarChar(8)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model CooperativeProfile {
+  collectorId     String   @id
+  collector       User     @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+  cooperativeName String
+  cnpj            String   @db.VarChar(14)
+  email           String   @db.VarChar(254)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cnpj])
 }

@@ -11,6 +11,16 @@ export interface CollectionPointHour extends CollectionPointOperatingHours {
   id: string;
   isActive: boolean;
 }
+export interface CollectionPointCooperativeDetails {
+  cooperativeName: string;
+  cnpj: string;
+  street: string;
+  streetNumber: string;
+  neighborhood: string;
+  state: string;
+  postalCode: string;
+  email: string;
+}
 export interface CollectionPoint {
   id: string;
   collectorId: string;
@@ -34,6 +44,7 @@ export interface CollectionPoint {
   createdAt: Date;
   updatedAt: Date;
   wasteCategories: string[];
+  cooperative?: CollectionPointCooperativeDetails;
   categoryApprovals?: CollectionPointCategoryApproval[];
   collector?: { id: string; name: string; email: string };
 }
@@ -55,6 +66,8 @@ export interface CollectionPointDraft {
   whatsappContact?: string;
   showWhatsappContact: boolean;
   wasteCategories: string[];
+  cooperative?: CollectionPointCooperativeDetails;
+  operatingHours?: CollectionPointOperatingHours[];
 }
 export interface NewCollectionPointDraft extends CollectionPointDraft {
   operatingHours: CollectionPointOperatingHours[];

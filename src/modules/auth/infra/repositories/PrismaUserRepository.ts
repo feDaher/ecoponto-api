@@ -65,6 +65,7 @@ export class PrismaUserRepository implements IUserRepository {
         }
 
         await tx.user.update({ where: { id }, data: { ...data, isBlocked: true } });
+        await tx.cooperativeProfile.deleteMany({ where: { collectorId: id } });
         await beforeCommit();
         return "ANONYMIZED";
       },

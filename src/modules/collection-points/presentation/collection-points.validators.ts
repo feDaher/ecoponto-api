@@ -23,21 +23,100 @@ const weekdays = [
   "SATURDAY",
   "SUNDAY",
 ] as const;
+const states = [
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+] as const;
 
 const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
+function IsValidCnpj(value: string) {
+  const cnpj = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!/^[A-Z0-9]{12}\d{2}$/.test(cnpj) || /^(\d)\1{13}$/.test(cnpj)) return false;
+
+  const CalculateDigit = (base: string, weights: number[]) => {
+    const sum = [...base].reduce(
+      (total, character, index) => total + (character.charCodeAt(0) - 48) * weights[index],
+      0,
+    );
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const firstDigit = CalculateDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const secondDigit = CalculateDigit(
+    `${cnpj.slice(0, 12)}${firstDigit}`,
+    [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
+  );
+  return cnpj.endsWith(`${firstDigit}${secondDigit}`);
+}
+
+const CooperativeConfigurationSchema = z.object({
+  cooperativeName: z.string().trim().min(1).max(191),
+  cnpj: z
+    .string()
+    .max(18)
+    .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+    .refine(IsValidCnpj, "Informe um CNPJ válido."),
+  street: z.string().trim().min(1).max(150),
+  streetNumber: z.string().trim().min(1).max(20),
+  neighborhood: z.string().trim().min(1).max(191),
+  state: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .pipe(z.enum(states, "Informe a sigla de um estado brasileiro.")),
+  postalCode: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .refine((value) => /^\d{8}$/.test(value), "Informe um CEP válido."),
+  email: z.string().trim().email().max(254),
+});
+
 const collectionPointFields = z.object({
-  name: z.string().trim().min(1),
-  description: z.string().trim().optional(),
-  city: z.string().trim().min(1),
-  address: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(191),
+  description: z.string().trim().max(2000).optional(),
+  city: z.string().trim().min(1).max(191),
+  address: z.string().trim().min(1).max(191),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   placeId: z
     .string()
     .regex(/^[A-Za-z0-9_-]{1,512}$/, "placeId must contain only letters, digits, _ or -")
     .optional(),
-  whatsappContact: z.string().trim().min(8).optional(),
+  whatsappContact: z
+    .string()
+    .trim()
+    .min(8)
+    .max(20)
+    .regex(/^\+?[0-9\s().-]+$/, "Informe um telefone válido.")
+    .refine((value) => value.replace(/\D/g, "").length >= 8, "Informe um telefone válido.")
+    .optional(),
   showWhatsappContact: z.boolean().default(false),
   wasteCategories: z
     .array(z.string().trim().min(1).max(191))
@@ -45,6 +124,7 @@ const collectionPointFields = z.object({
     .refine((categories) => new Set(categories).size === categories.length, {
       message: "As categorias de resíduos não podem se repetir.",
     }),
+  cooperative: CooperativeConfigurationSchema.optional(),
 });
 
 const whatsappRule = (
@@ -60,34 +140,51 @@ const whatsappRule = (
   }
 };
 
+const operatingHoursSchema = z
+  .array(
+    z
+      .object({
+        weekday: z.enum(weekdays),
+        openTime: timeOfDay,
+        closeTime: timeOfDay,
+      })
+      .refine((hour) => hour.openTime < hour.closeTime, {
+        path: ["closeTime"],
+        message: "O horário de fechamento deve ser depois do horário de abertura",
+      }),
+  )
+  .min(1)
+  .max(28)
+  .superRefine((hours, context) => {
+    const ordered = [...hours].sort(
+      (left, right) =>
+        weekdays.indexOf(left.weekday) - weekdays.indexOf(right.weekday) ||
+        left.openTime.localeCompare(right.openTime),
+    );
+    for (let index = 1; index < ordered.length; index += 1) {
+      const previous = ordered[index - 1];
+      const current = ordered[index];
+      if (previous.weekday === current.weekday && current.openTime < previous.closeTime) {
+        context.addIssue({
+          code: "custom",
+          path: [hours.indexOf(current), "openTime"],
+          message: "Os horários do mesmo dia não podem se sobrepor.",
+        });
+      }
+    }
+  });
+
 // POST: horários obrigatórios
 export const collectionPointSchema = collectionPointFields
   .extend({
-    operatingHours: z
-      .array(
-        z
-          .object({
-            weekday: z.enum(weekdays),
-            openTime: timeOfDay,
-            closeTime: timeOfDay,
-          })
-          .refine((hour) => hour.openTime < hour.closeTime, {
-            path: ["closeTime"],
-            message: "O horário de fechamento deve ser depois do horário de abertura",
-          }),
-      )
-      .min(1),
+    operatingHours: operatingHoursSchema,
   })
   .superRefine(whatsappRule);
 
-// PUT: sem horários (alterados só pelas rotas /operating-hours)
+// PUT: horários opcionais para salvar toda a configuração do ponto de forma conjunta.
 export const collectionPointUpdateSchema = collectionPointFields
   .extend({
-    operatingHours: z
-      .never({
-        error: "Os horários não são alterados aqui; use /collection-points/{id}/operating-hours",
-      })
-      .optional(),
+    operatingHours: operatingHoursSchema.optional(),
   })
   .superRefine(whatsappRule);
 

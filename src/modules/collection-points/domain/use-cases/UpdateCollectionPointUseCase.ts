@@ -35,6 +35,7 @@ export class UpdateCollectionPointUseCase {
     return this.points.update(id, {
       ...pointData,
       ...resolvedData,
+      collectorId: existing.collectorId,
       locationSource: source,
       categoryIds,
     });
