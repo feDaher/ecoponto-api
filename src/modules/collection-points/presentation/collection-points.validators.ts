@@ -311,3 +311,24 @@ export const searchCollectionPointsQuerySchema = z
   });
 
 export type SearchCollectionPointsQuery = z.output<typeof searchCollectionPointsQuerySchema>;
+
+export const updateCollectionPointMaterialSettingsSchema = z
+  .strictObject({
+    capacityKg: z
+      .number()
+      .positive()
+      .max(100_000)
+      .refine((capacity) => Number(capacity.toFixed(3)) === capacity, {
+        message: "capacityKg aceita no máximo três casas decimais",
+      })
+      .nullable()
+      .optional(),
+    isAccepting: z.boolean().optional(),
+  })
+  .refine((settings) => settings.capacityKg !== undefined || settings.isAccepting !== undefined, {
+    message: "Informe capacityKg, isAccepting ou ambos",
+  });
+
+export type UpdateCollectionPointMaterialSettingsBody = z.infer<
+  typeof updateCollectionPointMaterialSettingsSchema
+>;

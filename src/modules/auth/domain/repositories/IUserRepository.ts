@@ -10,6 +10,26 @@ export interface CreateUserData {
   role: Role;
 }
 
+export interface UpdateProfileData {
+  name: string;
+  phone: string;
+  city: string;
+}
+
+export interface AnonymizedUserData {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+}
+
+export interface AnonymizeOptions {
+  keepAnotherActiveAdmin: boolean;
+  beforeCommit: () => Promise<void>;
+}
+
+export type AnonymizeResult = "ANONYMIZED" | "LAST_ACTIVE_ADMIN";
+
 export interface IUserRepository {
   create(data: CreateUserData): Promise<User>;
   findByFirebaseUid(firebaseUid: string): Promise<User | null>;
@@ -17,4 +37,10 @@ export interface IUserRepository {
   findMany(): Promise<User[]>;
   updateBlockedStatus(id: string, isBlocked: boolean): Promise<User>;
   updateRole(id: string, role: Role): Promise<User>;
+  updateProfile(id: string, data: UpdateProfileData): Promise<User>;
+  anonymize(
+    id: string,
+    data: AnonymizedUserData,
+    options: AnonymizeOptions,
+  ): Promise<AnonymizeResult>;
 }

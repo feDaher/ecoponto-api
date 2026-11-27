@@ -6,11 +6,34 @@ import { PrismaAuditLogRepository } from "../modules/audit/infra/repositories/Pr
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const RESOURCE_ID_PARAMS = ["id", "collectionPointId", "categoryId"] as const;
 
-function resolveAction(method: string, statusCode: number): AuditAction | null {
+/**
+ * Leituras não são auditadas por padrão. Uma rota cuja leitura precisa ser registrada
+ * (ex.: consultar a própria trilha de auditoria, exigência da LGPD) declara a ação com
+ * `auditRead(...)`, que só vira registro se a resposta for 2xx.
+ */
+export function auditRead(action: AuditAction) {
+  return (_req: Request, res: Response, next: NextFunction) => {
+    res.locals.auditReadAction = action;
+    next();
+  };
+}
+
+export function auditSelf(req: Request, res: Response, next: NextFunction) {
+  res.locals.auditResourceId = req.user?.id;
+  next();
+}
+
+function resolveAction(
+  method: string,
+  statusCode: number,
+  readAction: AuditAction | undefined,
+): AuditAction | null {
   if (statusCode === 403) {
     return AuditAction.ACCESS_DENIED;
   }
-
+  if (readAction && statusCode >= 200 && statusCode < 300) {
+    return readAction;
+  }
   if (MUTATING_METHODS.has(method) && statusCode < 400) {
     return AuditAction.RESOURCE_CHANGED;
   }
@@ -32,7 +55,9 @@ function resolveResourceId(params: Record<string, string | string[]> | undefined
 export function createAuditTrail(repository: IAuditLogRepository) {
   return (req: Request, res: Response, next: NextFunction) => {
     res.on("finish", () => {
-      const action = req.user ? resolveAction(req.method, res.statusCode) : null;
+      const action = req.user
+        ? resolveAction(req.method, res.statusCode, res.locals.auditReadAction)
+        : null;
 
       if (!req.user || !action) {
         return;
@@ -46,7 +71,7 @@ export function createAuditTrail(repository: IAuditLogRepository) {
           action,
           method: req.method,
           route,
-          resourceId: resolveResourceId(res.locals.requestParams),
+          resourceId: res.locals.auditResourceId ?? resolveResourceId(res.locals.requestParams),
           statusCode: res.statusCode,
         })
         .catch((error: unknown) => {

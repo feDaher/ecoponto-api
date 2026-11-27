@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { DisposalStatus } from "../../../generated/prisma/enums";
+import { DisposalStatus, Role } from "../../../generated/prisma/enums";
 import type { ExportFormat, ExportScope, ReportFilter } from "../domain/entities/Report";
 import { ExportReportUseCase } from "../domain/use-cases/ExportReportUseCase";
 import { GetCategoryBreakdownUseCase } from "../domain/use-cases/GetCategoryBreakdownUseCase";
@@ -41,7 +41,15 @@ interface ReportRequestQuery {
   search?: string;
 }
 
-function buildFilter(query: ReportRequestQuery): ReportFilter {
+// Data scope comes from the token, never from the query: an ADMIN sees the whole platform,
+// a COLLECTOR only the disposals made at their own collection points.
+function collectorScope(req: Request): string | undefined {
+  return req.user!.role === Role.COLLECTOR ? req.user!.id : undefined;
+}
+
+function buildFilter(req: Request): ReportFilter {
+  const query = req.query as unknown as ReportRequestQuery;
+  const collectorId = collectorScope(req);
   return {
     from: query.from,
     to: query.to,
@@ -49,36 +57,34 @@ function buildFilter(query: ReportRequestQuery): ReportFilter {
     ...(query.region ? { region: query.region } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.search ? { search: query.search } : {}),
+    ...(collectorId ? { collectorId } : {}),
   };
 }
 
 export async function getSummary(req: Request, res: Response) {
-  const query = req.query as unknown as ReportRequestQuery;
-  res.status(200).json(await summaryUseCase.execute(buildFilter(query)));
+  res.status(200).json(await summaryUseCase.execute(buildFilter(req)));
 }
 
 export async function getByCategory(req: Request, res: Response) {
-  const query = req.query as unknown as ReportRequestQuery;
-  res.status(200).json(await categoryUseCase.execute(buildFilter(query)));
+  res.status(200).json(await categoryUseCase.execute(buildFilter(req)));
 }
 
 export async function getByPoint(req: Request, res: Response) {
-  const query = req.query as unknown as ReportRequestQuery;
-  res.status(200).json(await pointUseCase.execute(buildFilter(query)));
+  res.status(200).json(await pointUseCase.execute(buildFilter(req)));
 }
 
 export async function getManifests(req: Request, res: Response) {
-  const query = req.query as unknown as ReportRequestQuery & { page: number; pageSize: number };
-  const result = await manifestsUseCase.execute(buildFilter(query), query.page, query.pageSize);
+  const query = req.query as unknown as { page: number; pageSize: number };
+  const result = await manifestsUseCase.execute(buildFilter(req), query.page, query.pageSize);
   res.status(200).json(result);
 }
 
-export async function getFilterOptions(_req: Request, res: Response) {
-  res.status(200).json(await filterOptionsUseCase.execute());
+export async function getFilterOptions(req: Request, res: Response) {
+  res.status(200).json(await filterOptionsUseCase.execute(collectorScope(req)));
 }
 
 export async function exportReport(req: Request, res: Response) {
-  const query = req.query as unknown as ReportRequestQuery & {
+  const query = req.query as unknown as {
     scope: ExportScope;
     format: ExportFormat;
     page: number;
@@ -86,7 +92,7 @@ export async function exportReport(req: Request, res: Response) {
   };
 
   const result = await exportUseCase.execute({
-    filter: buildFilter(query),
+    filter: buildFilter(req),
     scope: query.scope,
     format: query.format,
     page: query.page,

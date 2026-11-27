@@ -40,6 +40,7 @@ services:
       - --gtid-mode=ON
       - --enforce-gtid-consistency=ON
       - --relay-log=relay-bin
+      - --relay-log-recovery=ON
     environment:
       # Sem MYSQL_DATABASE/MYSQL_USER: o banco e o usuário da aplicação chegam
       # pela replicação (criá-los aqui causa conflito no CREATE USER replicado).
@@ -52,11 +53,16 @@ services:
     healthcheck:
       # Só fica saudável com as duas threads de replicação rodando (IO e SQL): um "ping"
       # passaria mesmo com a replicação quebrada, e o `db:up --wait` não acusaria nada.
+      # A senha vai por MYSQL_PWD para não aparecer na linha de comando (`ps`).
       test:
-        [
-          "CMD-SHELL",
-          "mysql -h 127.0.0.1 -uroot -proot -e 'SHOW REPLICA STATUS\\G' 2>/dev/null | grep -c 'Running: Yes' | grep -qx 2",
-        ]
+        - "CMD-SHELL"
+        - >-
+          MYSQL_PWD="$$MYSQL_ROOT_PASSWORD"
+          mysql -h 127.0.0.1 -uroot
+          -e 'SHOW REPLICA STATUS\G'
+          2>/dev/null
+          | grep -c 'Running: Yes'
+          | grep -qx 2
       interval: 5s
       timeout: 5s
       retries: 10

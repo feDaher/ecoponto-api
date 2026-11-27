@@ -20,15 +20,25 @@ import { citizenRoutes } from "./modules/citizen/presentation/citizen.routes";
 import { collectionPointsRoutes } from "./modules/collection-points/presentation/collection-points.routes";
 import { placesRoutes } from "./modules/places/presentation/places.routes";
 import { reportsRoutes } from "./modules/reports/presentation/reports.routes";
+import { auditLogRoutes } from "./modules/audit/presentation/audit-logs.routes";
+import { reviewsRoutes } from "./modules/reviews/presentation/reviews.routes";
+import { disposalsRoutes } from "./modules/disposals/presentation/disposals.routes";
+import { rankingRoutes } from "./modules/ranking/presentation/ranking.routes";
 
 export const app = express();
 
+// Off unless TRUST_PROXY is set: behind a reverse proxy, req.ip (and so every rate limiter)
+// would otherwise see the proxy's IP and throttle all users together.
+app.set("trust proxy", env.TRUST_PROXY);
+
 app.use(helmet());
-app.use(cors({ exposedHeaders: ["X-Total-Count"] }));
+app.use(cors({ origin: env.CORS_ORIGINS ?? "*", exposedHeaders: ["X-Total-Count"] }));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: env.RATE_LIMIT_MAX,
+    // Platform health probes must never be throttled into a false "down".
+    skip: (req) => req.path === "/health" || req.path === "/health/ready",
   }),
 );
 app.use(express.json());
@@ -48,6 +58,10 @@ app.use(citizenRoutes);
 app.use(collectionPointsRoutes);
 app.use(placesRoutes);
 app.use(reportsRoutes);
+app.use(auditLogRoutes);
+app.use(reviewsRoutes);
+app.use(disposalsRoutes);
+app.use(rankingRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

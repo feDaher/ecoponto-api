@@ -41,6 +41,8 @@ beforeEach(() => {
   prisma.wasteCategory.findMany.mockResolvedValue([
     { id: "category-plastic", name: "PLASTIC", active: true },
   ]);
+  // Daily Google Places quota still available.
+  prisma.placesApiUsage.updateMany.mockResolvedValue({ count: 1 });
   prisma.collectionPoint.create.mockImplementation(async ({ data }) => ({
     id: "point-1",
     ...data,

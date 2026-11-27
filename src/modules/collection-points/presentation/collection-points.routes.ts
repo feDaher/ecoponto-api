@@ -8,7 +8,12 @@ import {
   collectionPointUpdateSchema,
   reviewSchema,
   searchCollectionPointsQuerySchema,
+  updateCollectionPointMaterialSettingsSchema,
 } from "./collection-points.validators";
+import {
+  reviewPointCategorySchema,
+  updatePointCategoriesSchema,
+} from "./validators/point-categories.validators";
 import {
   create,
   findApprovedById,
@@ -17,7 +22,14 @@ import {
   listPublic,
   review,
   update,
+  updateMaterialSettings,
 } from "./collection-points.controller";
+import {
+  listCategoryReviews,
+  listPendingCategories,
+  reviewCategory,
+  updateCategories,
+} from "./point-categories.controller";
 
 export const collectionPointsRoutes = Router();
 
@@ -95,11 +107,18 @@ collectionPointsRoutes.get(
  * /collection-points/mine:
  *   get:
  *     summary: List the authenticated collector's points
+ *     description: >
+ *       Oldest point first (createdAt ascending), so the first item stays the same when another
+ *       point is edited. An empty array means the collector has no point yet.
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: The collector's points, including moderation status
+ *         description: >
+ *           The collector's points, including moderation status. Besides wasteCategories (codes),
+ *           each point has categoryApprovals [{ categoryId, name, approvalStatus, isAccepting,
+ *           capacityKg }],
+ *           so the owner can tell approved categories from those still pending (BE-21).
  *       401:
  *         description: Missing, invalid or expired token
  *       403:
@@ -132,6 +151,28 @@ collectionPointsRoutes.get(
   authenticate,
   authorize(Role.ADMIN),
   listPending,
+);
+
+/**
+ * @openapi
+ * /collection-points/admin/pending-categories:
+ *   get:
+ *     summary: List accepted-category requests awaiting administrator review
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Categories added to points that are pending approval
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not an administrator
+ */
+collectionPointsRoutes.get(
+  "/collection-points/admin/pending-categories",
+  authenticate,
+  authorize(Role.ADMIN),
+  listPendingCategories,
 );
 
 /**
@@ -266,4 +307,198 @@ collectionPointsRoutes.patch(
   authorize(Role.ADMIN),
   validate(reviewSchema),
   review,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/categories:
+ *   put:
+ *     summary: Change the accepted waste categories of a point without resubmitting it
+ *     description: >
+ *       Removed categories take effect immediately and the point stays approved and on the map.
+ *       Categories added by the collector stay pending until an administrator approves them and
+ *       only then count in the public search; categories added by an administrator are approved
+ *       right away (and recorded in the review history). The point must keep at least one
+ *       approved category.
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [wasteCategories]
+ *             properties:
+ *               wasteCategories:
+ *                 type: array
+ *                 minItems: 1
+ *                 uniqueItems: true
+ *                 items: { type: string, example: PLASTIC }
+ *     responses:
+ *       200:
+ *         description: >
+ *           The point's categories as [{ pointId, categoryId, categoryName, approvalStatus,
+ *           isAccepting, capacityKg }] (capacityKg null = no limit)
+ *       400:
+ *         description: Malformed body, repeated codes or unknown/inactive category
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not the owner of the point nor an administrator
+ *       404:
+ *         description: Point not found
+ *       422:
+ *         description: The point would be left without any approved category
+ */
+collectionPointsRoutes.put(
+  "/collection-points/:id/categories",
+  authenticate,
+  authorize(Role.COLLECTOR, Role.ADMIN),
+  validate(updatePointCategoriesSchema),
+  updateCategories,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/categories/reviews:
+ *   get:
+ *     summary: History of administrator decisions on the point's categories
+ *     description: >
+ *       Newest first, at most 100 entries. Includes approvals, rejections with their reason and
+ *       categories added directly by an administrator. Only the point owner or an administrator
+ *       may read it; reviewedBy is filled only for administrators (null for the collector).
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Decisions (id, categoryId, categoryName, decision, reason, reviewedAt, reviewedBy)
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not the owner of the point nor an administrator
+ *       404:
+ *         description: Point not found
+ */
+collectionPointsRoutes.get(
+  "/collection-points/:id/categories/reviews",
+  authenticate,
+  authorize(Role.COLLECTOR, Role.ADMIN),
+  listCategoryReviews,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/categories/{categoryId}/review:
+ *   patch:
+ *     summary: Approve or reject an added category (administrator only)
+ *     description: >
+ *       Rejecting removes the link between the point and the category and requires a reason
+ *       (max 500 chars). Every decision, with its reason, is kept in the category review history
+ *       (GET /collection-points/{id}/categories/reviews).
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [APPROVED, REJECTED] }
+ *               rejectionReason: { type: string }
+ *     responses:
+ *       204:
+ *         description: Decision saved
+ *       400:
+ *         description: Invalid decision or missing rejection reason
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: User is not an administrator
+ *       404:
+ *         description: Category not found on this point
+ *       409:
+ *         description: Category is already approved
+ */
+collectionPointsRoutes.patch(
+  "/collection-points/:id/categories/:categoryId/review",
+  authenticate,
+  authorize(Role.ADMIN),
+  validate(reviewPointCategorySchema),
+  reviewCategory,
+);
+
+/**
+ * @openapi
+ * /collection-points/{id}/materials/{categoryId}:
+ *   patch:
+ *     summary: Update reception settings for a collection point material
+ *     tags: [Collection Points]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: categoryId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             minProperties: 1
+ *             additionalProperties: false
+ *             properties:
+ *               capacityKg:
+ *                 type: number
+ *                 exclusiveMinimum: 0
+ *                 maximum: 100000
+ *                 nullable: true
+ *                 description: null removes the capacity limit
+ *                 multipleOf: 0.001
+ *               isAccepting:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Material reception settings updated
+ *       400:
+ *         description: Invalid or empty settings body
+ *       401:
+ *         description: Missing, invalid or expired token
+ *       403:
+ *         description: Requester is not a collector/administrator, or does not own the point
+ *       404:
+ *         description: Collection point or point category not found
+ */
+collectionPointsRoutes.patch(
+  "/collection-points/:id/materials/:categoryId",
+  authenticate,
+  authorize(Role.COLLECTOR, Role.ADMIN),
+  validate(updateCollectionPointMaterialSettingsSchema),
+  updateMaterialSettings,
 );

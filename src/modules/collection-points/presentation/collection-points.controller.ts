@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
-import { env } from "../../../config/env";
-import { GooglePlacesClient } from "../../places/infra/http/GooglePlacesClient";
+import { placesGateway } from "../../places/infra/places-gateway";
 import { ResolveLocationUseCase } from "../../geolocation/domain/use-cases/ResolveLocationUseCase";
 import { PrismaWasteCategoryRepository } from "../../waste-categories/infra/repositories/PrismaWasteCategoryRepository";
 import { PrismaCollectionPointRepository } from "../infra/repositories/PrismaCollectionPointRepository";
@@ -12,18 +11,19 @@ import { ListPendingCollectionPointsUseCase } from "../domain/use-cases/ListPend
 import { ReviewCollectionPointUseCase } from "../domain/use-cases/ReviewCollectionPointUseCase";
 import { SearchCollectionPointsUseCase } from "../domain/use-cases/SearchCollectionPointsUseCase";
 import { UpdateCollectionPointUseCase } from "../domain/use-cases/UpdateCollectionPointUseCase";
+import { UpdateCollectionPointMaterialSettingsUseCase } from "../domain/use-cases/UpdateCollectionPointMaterialSettingsUseCase";
 import { toPublicCollectionPoint } from "./collection-points.presenter";
 import type {
   CollectionPointInput,
   CollectionPointUpdateInput,
   SearchCollectionPointsQuery,
+  UpdateCollectionPointMaterialSettingsBody,
 } from "./collection-points.validators";
 
 const pointRepository = new PrismaCollectionPointRepository();
 const categoryRepository = new PrismaWasteCategoryRepository();
-const locationResolver = new ResolveLocationUseCase(
-  new GooglePlacesClient(env.GOOGLE_MAPS_API_KEY),
-);
+// Shared gateway: address verification counts toward the same daily Google Places limit.
+const locationResolver = new ResolveLocationUseCase(placesGateway);
 const createUseCase = new CreateCollectionPointUseCase(
   pointRepository,
   categoryRepository,
@@ -42,6 +42,9 @@ const searchUseCase = new SearchCollectionPointsUseCase(
 const findApprovedUseCase = new FindApprovedCollectionPointByIdUseCase(pointRepository);
 const listMineUseCase = new ListMyCollectionPointsUseCase(pointRepository);
 const listPendingUseCase = new ListPendingCollectionPointsUseCase(pointRepository);
+const updateMaterialSettingsUseCase = new UpdateCollectionPointMaterialSettingsUseCase(
+  pointRepository,
+);
 
 function pointIdFrom(request: Request) {
   const { id } = request.params;
@@ -101,4 +104,15 @@ export async function review(req: Request, res: Response) {
     reviewerId: req.user!.id,
   });
   res.status(200).json(point);
+}
+
+export async function updateMaterialSettings(req: Request, res: Response) {
+  const { id, categoryId } = req.params;
+  const updated = await updateMaterialSettingsUseCase.execute({
+    pointId: Array.isArray(id) ? id[0] : id,
+    categoryId: Array.isArray(categoryId) ? categoryId[0] : categoryId,
+    ...(req.body as UpdateCollectionPointMaterialSettingsBody),
+    requester: req.user!,
+  });
+  res.status(200).json(updated);
 }

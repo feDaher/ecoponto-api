@@ -22,3 +22,7 @@ CREATE TABLE `CooperativeProfile` (
     PRIMARY KEY (`collectorId`),
     INDEX `CooperativeProfile_cnpj_idx` (`cnpj`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE `CollectionPointConfiguration` ADD CONSTRAINT `CollectionPointConfiguration_collectionPointId_fkey` FOREIGN KEY (`collectionPointId`) REFERENCES `CollectionPoint`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE `CooperativeProfile` ADD CONSTRAINT `CooperativeProfile_collectorId_fkey` FOREIGN KEY (`collectorId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

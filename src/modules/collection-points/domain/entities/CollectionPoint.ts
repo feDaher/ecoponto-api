@@ -45,7 +45,15 @@ export interface CollectionPoint {
   updatedAt: Date;
   wasteCategories: string[];
   cooperative?: CollectionPointCooperativeDetails;
+  categoryApprovals?: CollectionPointCategoryApproval[];
   collector?: { id: string; name: string; email: string };
+}
+export interface CollectionPointCategoryApproval {
+  categoryId: string;
+  name: string;
+  approvalStatus: "PENDING" | "APPROVED";
+  isAccepting: boolean;
+  capacityKg: number | null;
 }
 export interface CollectionPointDraft {
   name: string;

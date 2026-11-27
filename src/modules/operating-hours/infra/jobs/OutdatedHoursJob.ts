@@ -5,7 +5,7 @@ import { PrismaOperatingHoursRepository } from "../repositories/PrismaOperatingH
 export function startOutdatedHoursJob() {
   const flagOutdatedHours = new FlagOutdatedHoursUseCase(new PrismaOperatingHoursRepository());
 
-  cron.schedule(
+  return cron.schedule(
     "0 3 * * *",
     async () => {
       try {

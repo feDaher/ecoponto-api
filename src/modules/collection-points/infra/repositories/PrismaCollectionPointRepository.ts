@@ -1,15 +1,23 @@
 import { prisma } from "../../../../config/prisma";
-import { CollectionPointStatus } from "../../../../generated/prisma/enums";
+import {
+  CollectionPointStatus,
+  PointCategoryApprovalStatus,
+  PointCategoryDecision,
+} from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
 import type {
   CollectionPoint,
   CollectionPointCooperativeDetails,
 } from "../../domain/entities/CollectionPoint";
+import { PointCategory } from "../../domain/entities/PointCategory";
 import type {
+  UpdateCollectionPointMaterialSettings,
   CollectionPointWriteData,
   CreateCollectionPointData,
   ICollectionPointRepository,
+  ApplyCategoryChangesData,
+  PointCategoryReviewData,
   ReviewCollectionPointData,
 } from "../../domain/repositories/ICollectionPointRepository";
 import { activeHoursInclude, formatHours } from "./operating-hours.include";
@@ -17,10 +25,20 @@ import { activeHoursInclude, formatHours } from "./operating-hours.include";
 const pointWithCategories = {
   categories: { include: { category: { select: { name: true } } } },
 } as const;
+// Public responses list only categories that are approved by an administrator (BE-21)
+// and currently receiving (BE-19).
+const pointWithAcceptingCategories = {
+  categories: {
+    where: { isAccepting: true, approvalStatus: PointCategoryApprovalStatus.APPROVED },
+    include: { category: { select: { name: true } } },
+  },
+} as const;
 const pointWithDetails = { ...pointWithCategories, ...activeHoursInclude };
+const publicPointWithDetails = { ...pointWithAcceptingCategories, ...activeHoursInclude };
 const pointWithCollector = {
   collector: { select: { id: true, name: true, email: true } },
 } as const;
+const CATEGORY_REVIEW_HISTORY_LIMIT = 100;
 const publicOmit = { rejectionReason: true, reviewedById: true, reviewedAt: true } as const;
 type PublicPointRow = Prisma.CollectionPointGetPayload<{
   include: typeof pointWithDetails;
@@ -73,6 +91,29 @@ function toConfigurationData(details: CollectionPointCooperativeDetails) {
     state: details.state,
     postalCode: details.postalCode,
   };
+}
+
+async function loadCooperativeDetails(points: { id: string; collectorId: string }[]) {
+  if (points.length === 0) return () => undefined;
+
+  const [configurations, profiles] = await Promise.all([
+    prisma.collectionPointConfiguration.findMany({
+      where: { collectionPointId: { in: points.map(({ id }) => id) } },
+    }),
+    prisma.cooperativeProfile.findMany({
+      where: { collectorId: { in: [...new Set(points.map(({ collectorId }) => collectorId))] } },
+    }),
+  ]);
+  const configurationsByPoint = new Map(
+    configurations.map((configuration) => [configuration.collectionPointId, configuration]),
+  );
+  const profilesByCollector = new Map(profiles.map((profile) => [profile.collectorId, profile]));
+
+  return (point: { id: string; collectorId: string }) =>
+    toCooperativeDetails(
+      profilesByCollector.get(point.collectorId),
+      configurationsByPoint.get(point.id),
+    );
 }
 
 function toEntity(row: PointRow, cooperative?: CollectionPointCooperativeDetails): CollectionPoint {
@@ -143,17 +184,11 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
         include: pointWithDetails,
       });
       const configuration = await transaction.collectionPointConfiguration.create({
-        data: {
-          collectionPointId: point.id,
-          ...toConfigurationData(cooperative),
-        },
+        data: { collectionPointId: point.id, ...toConfigurationData(cooperative) },
       });
       const profile = await transaction.cooperativeProfile.upsert({
         where: { collectorId: data.collectorId },
-        create: {
-          collectorId: data.collectorId,
-          ...toProfileData(cooperative),
-        },
+        create: { collectorId: data.collectorId, ...toProfileData(cooperative) },
         update: toProfileData(cooperative),
       });
       return toEntity(point, toCooperativeDetails(profile, configuration));
@@ -173,11 +208,14 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       placeId: data.placeId,
       whatsappContact: data.whatsappContact,
       showWhatsappContact: data.showWhatsappContact,
+      // Diff the links instead of recreating them: categories kept on resubmission must keep
+      // their reception settings (BE-19) instead of silently going back to the defaults.
       categories: {
-        deleteMany: {},
-        create: data.categoryIds.map((categoryId) => ({
-          category: { connect: { id: categoryId } },
-        })),
+        deleteMany: { categoryId: { notIn: data.categoryIds } },
+        createMany: {
+          data: data.categoryIds.map((categoryId) => ({ categoryId })),
+          skipDuplicates: true,
+        },
       },
       status: CollectionPointStatus.PENDING,
       rejectionReason: null,
@@ -197,34 +235,22 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       }),
     };
     const updatePoint = (client: Pick<Prisma.TransactionClient, "collectionPoint">) =>
-      client.collectionPoint.update({
-        where: { id },
-        data: updateData,
-        include: pointWithDetails,
-      });
+      client.collectionPoint.update({ where: { id }, data: updateData, include: pointWithDetails });
 
-    if (!cooperative && !data.operatingHours) {
+    if (!cooperative) {
       return toEntity(await updatePoint(prisma));
     }
 
     return prisma.$transaction(async (transaction) => {
       const point = await updatePoint(transaction);
-      if (!cooperative) return toEntity(point);
-
       const configuration = await transaction.collectionPointConfiguration.upsert({
         where: { collectionPointId: id },
-        create: {
-          collectionPointId: id,
-          ...toConfigurationData(cooperative),
-        },
+        create: { collectionPointId: id, ...toConfigurationData(cooperative) },
         update: toConfigurationData(cooperative),
       });
       const profile = await transaction.cooperativeProfile.upsert({
         where: { collectorId: data.collectorId },
-        create: {
-          collectorId: data.collectorId,
-          ...toProfileData(cooperative),
-        },
+        create: { collectorId: data.collectorId, ...toProfileData(cooperative) },
         update: toProfileData(cooperative),
       });
       return toEntity(point, toCooperativeDetails(profile, configuration));
@@ -249,7 +275,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     const point = await prisma.collectionPoint.findFirst({
       where: { id, status: CollectionPointStatus.APPROVED },
       omit: publicOmit,
-      include: pointWithDetails,
+      include: publicPointWithDetails,
     });
     return point ? toEntity(point) : null;
   }
@@ -261,37 +287,56 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
     });
   }
 
+  async updateMaterialSettings(
+    pointId: string,
+    categoryId: string,
+    settings: UpdateCollectionPointMaterialSettings,
+  ) {
+    const { count } = await prisma.pointCategory.updateMany({
+      where: { pointId, categoryId },
+      data: {
+        ...(settings.capacityKg !== undefined && { capacityKg: settings.capacityKg }),
+        ...(settings.isAccepting !== undefined && { isAccepting: settings.isAccepting }),
+      },
+    });
+
+    if (count === 0) return null;
+
+    const material = await prisma.pointCategory.findUnique({
+      where: { pointId_categoryId: { pointId, categoryId } },
+      select: { capacityKg: true, isAccepting: true },
+    });
+
+    if (!material) return null;
+
+    return {
+      pointId,
+      categoryId,
+      capacityKg: material.capacityKg?.toNumber() ?? null,
+      isAccepting: material.isAccepting,
+    };
+  }
+
   async listMine(collectorId: string) {
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: pointWithDetails,
     });
-    const configurations = points.length
-      ? await prisma.collectionPointConfiguration.findMany({
-          where: { collectionPointId: { in: points.map(({ id }) => id) } },
-        })
-      : [];
-    const profiles = points.length
-      ? await prisma.cooperativeProfile.findMany({
-          where: {
-            collectorId: { in: [...new Set(points.map(({ collectorId }) => collectorId))] },
-          },
-        })
-      : [];
-    const configurationsByPoint = new Map(
-      configurations.map((configuration) => [configuration.collectionPointId, configuration]),
-    );
-    const profilesByCollector = new Map(profiles.map((profile) => [profile.collectorId, profile]));
-    return points.map((point) =>
-      toEntity(
-        point,
-        toCooperativeDetails(
-          profilesByCollector.get(point.collectorId),
-          configurationsByPoint.get(point.id),
-        ),
-      ),
-    );
+    const cooperativeOf = await loadCooperativeDetails(points);
+    // The owner needs to tell approved categories from those still waiting for an admin (BE-21).
+    return points.map((row) => ({
+      ...toEntity(row, cooperativeOf(row)),
+      categoryApprovals: row.categories
+        .map((link) => ({
+          categoryId: link.categoryId,
+          name: link.category.name,
+          approvalStatus: link.approvalStatus,
+          isAccepting: link.isAccepting,
+          capacityKg: link.capacityKg?.toNumber() ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
   }
 
   async listPending() {
@@ -300,30 +345,124 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       include: { ...pointWithDetails, ...pointWithCollector },
       orderBy: { createdAt: "asc" },
     });
-    const configurations = points.length
-      ? await prisma.collectionPointConfiguration.findMany({
-          where: { collectionPointId: { in: points.map(({ id }) => id) } },
-        })
-      : [];
-    const profiles = points.length
-      ? await prisma.cooperativeProfile.findMany({
-          where: {
-            collectorId: { in: [...new Set(points.map(({ collectorId }) => collectorId))] },
-          },
-        })
-      : [];
-    const configurationsByPoint = new Map(
-      configurations.map((configuration) => [configuration.collectionPointId, configuration]),
-    );
-    const profilesByCollector = new Map(profiles.map((profile) => [profile.collectorId, profile]));
-    return points.map((point) =>
-      toEntity(
-        point,
-        toCooperativeDetails(
-          profilesByCollector.get(point.collectorId),
-          configurationsByPoint.get(point.id),
+    const cooperativeOf = await loadCooperativeDetails(points);
+    return points.map((point) => toEntity(point, cooperativeOf(point)));
+  }
+
+  async findActiveCategoriesByNames(names: string[]) {
+    return prisma.wasteCategory.findMany({
+      where: { name: { in: names }, active: true },
+      select: { id: true, name: true },
+    });
+  }
+
+  async findCategoriesByPointId(pointId: string) {
+    const rows = await prisma.pointCategory.findMany({
+      where: { pointId },
+      include: { category: { select: { name: true } } },
+    });
+    return rows.map(
+      (r) =>
+        new PointCategory(
+          r.pointId,
+          r.categoryId,
+          r.category.name,
+          r.approvalStatus,
+          r.isAccepting,
+          r.capacityKg?.toNumber() ?? null,
         ),
-      ),
     );
+  }
+
+  async applyCategoryChanges(
+    pointId: string,
+    { removeIds, addIds, approvedById }: ApplyCategoryChangesData,
+  ) {
+    const approvalStatus = approvedById
+      ? PointCategoryApprovalStatus.APPROVED
+      : PointCategoryApprovalStatus.PENDING;
+
+    await prisma.$transaction([
+      prisma.pointCategory.deleteMany({
+        where: { pointId, categoryId: { in: removeIds } },
+      }),
+      prisma.pointCategory.createMany({
+        data: addIds.map((categoryId) => ({ pointId, categoryId, approvalStatus })),
+        skipDuplicates: true,
+      }),
+      ...(approvedById && addIds.length > 0
+        ? [
+            prisma.pointCategoryReview.createMany({
+              data: addIds.map((categoryId) => ({
+                pointId,
+                categoryId,
+                decision: PointCategoryDecision.APPROVED,
+                reviewedById: approvedById,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+  }
+
+  async listPendingCategories() {
+    const rows = await prisma.pointCategory.findMany({
+      where: { approvalStatus: "PENDING" },
+      include: {
+        point: { select: { name: true } },
+        category: { select: { name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      pointId: r.pointId,
+      pointName: r.point.name,
+      categoryId: r.categoryId,
+      categoryName: r.category.name,
+    }));
+  }
+
+  async reviewCategory(
+    pointId: string,
+    categoryId: string,
+    { decision, reason, reviewedById }: PointCategoryReviewData,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      // Conditional on PENDING so concurrent reviews cannot both win (nor fail with a 500).
+      const where = { pointId, categoryId, approvalStatus: PointCategoryApprovalStatus.PENDING };
+      const { count } =
+        decision === "APPROVED"
+          ? await tx.pointCategory.updateMany({
+              where,
+              data: { approvalStatus: PointCategoryApprovalStatus.APPROVED },
+            })
+          : await tx.pointCategory.deleteMany({ where });
+      if (count === 0) return false;
+
+      await tx.pointCategoryReview.create({
+        data: { pointId, categoryId, decision, reason, reviewedById },
+      });
+      return true;
+    });
+  }
+
+  async listCategoryReviews(pointId: string) {
+    const rows = await prisma.pointCategoryReview.findMany({
+      where: { pointId },
+      orderBy: [{ reviewedAt: "desc" }, { id: "desc" }],
+      take: CATEGORY_REVIEW_HISTORY_LIMIT,
+      include: {
+        category: { select: { name: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      categoryId: row.categoryId,
+      categoryName: row.category.name,
+      decision: row.decision,
+      reason: row.reason,
+      reviewedAt: row.reviewedAt,
+      reviewedBy: row.reviewedBy,
+    }));
   }
 }

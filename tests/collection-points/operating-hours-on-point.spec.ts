@@ -144,7 +144,7 @@ describe("operating hours on point edition", () => {
     const response = await edit(newPoint);
 
     expect(response.status).toBe(200);
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.collectionPoint.update).toHaveBeenCalledTimes(1);
     const { data } = prisma.collectionPoint.update.mock.calls[0][0];
     expect(data.hours).toEqual({
       deleteMany: {},

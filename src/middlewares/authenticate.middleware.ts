@@ -48,11 +48,17 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return;
   }
 
+  // The profile fields come from the row already loaded above, so `GET /auth/me` can return the
+  // whole profile (RB01: name, phone and city) without a second query.
   req.user = {
     id: user.id,
     firebaseUid: user.firebaseUid,
     email: user.email,
     role: user.role,
+    name: user.name,
+    phone: user.phone,
+    city: user.city,
+    createdAt: user.createdAt,
   };
   res.locals.requestParams = { ...req.params };
 

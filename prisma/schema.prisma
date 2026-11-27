@@ -60,6 +60,22 @@ enum ContentStatus {
   PUBLISHED
 }
 
+enum WasteClass {
+  CLASS_I
+  CLASS_IIA
+  CLASS_IIB
+}
+
+enum PointCategoryApprovalStatus {
+  PENDING
+  APPROVED
+}
+
+enum PointCategoryDecision {
+  APPROVED
+  REJECTED
+}
+
 model User {
   id          String   @id @default(uuid())
   firebaseUid String   @unique
@@ -72,12 +88,14 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  collectionPoints CollectionPoint[] @relation("CollectorPoints")
-  reviewedPoints   CollectionPoint[] @relation("ReviewedPoints")
-  collections      Collection[]
-  disposalRecords  DisposalRecord[]
-  reviews          Review[]
-  auditLogs        AuditLog[]
+  collectionPoints   CollectionPoint[]     @relation("CollectorPoints")
+  cooperativeProfile CooperativeProfile?
+  reviewedPoints     CollectionPoint[]     @relation("ReviewedPoints")
+  collections        Collection[]
+  disposalRecords    DisposalRecord[]
+  reviews            Review[]
+  auditLogs          AuditLog[]
+  categoryReviews    PointCategoryReview[] @relation("PointCategoryReviewer")
 
   @@index([createdAt])
 }
@@ -108,10 +126,12 @@ model CollectionPoint {
 
   categories      PointCategory[]
   hours           OperatingHours[]
+  configuration   CollectionPointConfiguration?
   geolocation     Geolocation?
   collections     Collection[]
   disposalRecords DisposalRecord[]
   reviews         Review[]
+  categoryReviews PointCategoryReview[]
 
   @@index([status, name])
   @@index([status, city, name])
@@ -122,15 +142,18 @@ model CollectionPoint {
 }
 
 model WasteCategory {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String? @db.VarChar(500)
-  active      Boolean @default(true)
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?     @db.VarChar(500)
+  active      Boolean     @default(true)
+  label       String?     @db.VarChar(191)
+  wasteClass  WasteClass?
 
   educationalContents EducationalContent[]
 
   points          PointCategory[]
   disposalRecords DisposalRecord[]
+  pointReviews    PointCategoryReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -145,13 +168,39 @@ model Waste {
 }
 
 model PointCategory {
-  pointId    String
-  categoryId String
+  pointId        String
+  categoryId     String
+  capacityKg     Decimal?                    @db.Decimal(10, 3)
+  isAccepting    Boolean                     @default(true)
+  approvalStatus PointCategoryApprovalStatus @default(APPROVED)
 
   point    CollectionPoint @relation(fields: [pointId], references: [id])
   category WasteCategory   @relation(fields: [categoryId], references: [id])
 
   @@id([pointId, categoryId])
+  @@index([approvalStatus])
+}
+
+// Append-only log of every administrator decision on a point's category (BE-21): approvals,
+// rejections (with the mandatory reason) and categories added directly by an ADMIN. A rejection
+// deletes the PointCategory link, so this table is where the reason survives. Never updated.
+model PointCategoryReview {
+  id           String                @id @default(uuid())
+  pointId      String
+  categoryId   String
+  decision     PointCategoryDecision
+  reason       String?               @db.VarChar(500)
+  reviewedById String?
+  reviewedAt   DateTime              @default(now())
+
+  point      CollectionPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  category   WasteCategory   @relation(fields: [categoryId], references: [id])
+  // SetNull: removing a user (LGPD erasure) keeps the decision but drops who made it.
+  reviewedBy User?           @relation("PointCategoryReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([pointId, reviewedAt])
+  @@index([categoryId])
+  @@index([reviewedById])
 }
 
 model EducationalContent {
@@ -272,9 +321,11 @@ model Review {
   collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id])
   rating            Int             @db.UnsignedTinyInt
   comment           String?         @db.Text
+  isHidden          Boolean         @default(false)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
+  @@unique([citizenId, collectionPointId])
   @@index([citizenId])
   @@index([collectionPointId])
   @@index([collectionPointId, createdAt])
@@ -294,21 +345,35 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+}
+
+// Daily count of paid Google Places calls, used to stay inside the free monthly tier.
+// day is the calendar date in America/Sao_Paulo ("YYYY-MM-DD").
+model PlacesApiUsage {
+  sku       String   @db.VarChar(40)
+  day       String   @db.Char(10)
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@id([sku, day])
 }
 
 model CollectionPointConfiguration {
-  collectionPointId String   @id
+  collectionPointId String          @id
+  collectionPoint   CollectionPoint @relation(fields: [collectionPointId], references: [id], onDelete: Cascade)
   street            String
-  streetNumber      String   @db.VarChar(20)
+  streetNumber      String          @db.VarChar(20)
   neighborhood      String
-  state             String   @db.Char(2)
-  postalCode        String   @db.VarChar(8)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  state             String          @db.Char(2)
+  postalCode        String          @db.VarChar(8)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model CooperativeProfile {
   collectorId     String   @id
+  collector       User     @relation(fields: [collectorId], references: [id], onDelete: Cascade)
   cooperativeName String
   cnpj            String   @db.VarChar(14)
   email           String   @db.VarChar(254)

@@ -15,6 +15,37 @@ const envSchema = z.object({
   DB_POOL_IDLE_TIMEOUT_S: z.coerce.number().int().positive().default(300),
   DB_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
+  // Express "trust proxy". Unset/empty → off (local dev, direct connections). Behind a reverse
+  // proxy set it to the number of proxy hops (usually 1) or to the proxy IPs/subnets, comma
+  // separated, so the rate limiters see the client IP instead of the proxy's. "true" is
+  // rejected: it lets any client spoof X-Forwarded-For and dodge the limiters.
+  TRUST_PROXY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value, ctx) => {
+      if (!value || value === "false") return false;
+      if (/^\d+$/.test(value)) return Number(value);
+      if (value === "true") {
+        ctx.addIssue({ code: "custom", message: 'use a hop count (e.g. "1") or proxy IPs' });
+        return z.NEVER;
+      }
+      return value;
+    }),
+  // Allowed browser origins, comma separated (e.g. "https://app.ecoponto.com.br").
+  // Unset/empty → any origin, which is safe here because auth uses Bearer tokens, not cookies.
+  CORS_ORIGINS: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) =>
+      value
+        ? value
+            .split(",")
+            .map((origin) => origin.trim())
+            .filter(Boolean)
+        : undefined,
+    ),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().min(1),
   FIREBASE_PRIVATE_KEY: z.string().min(1),
@@ -26,6 +57,10 @@ const envSchema = z.object({
     .trim()
     .optional()
     .transform((value) => value || undefined),
+  // Daily caps on paid Google Places calls (reset at midnight America/Sao_Paulo).
+  // 250/day × 31 days = 7,750/month, below the 10,000 free calls/month of each SKU.
+  PLACES_AUTOCOMPLETE_DAILY_LIMIT: z.coerce.number().int().nonnegative().default(250),
+  PLACES_DETAILS_DAILY_LIMIT: z.coerce.number().int().nonnegative().default(250),
 });
 
 const parsed = envSchema.safeParse(process.env);

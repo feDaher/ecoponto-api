@@ -34,13 +34,21 @@ export interface DisposalQueryOptions {
   categoryIds?: string[];
 }
 
+export interface CitizenReach {
+  total: number;
+  newInPeriod: number;
+}
+
 export interface IReportRepository {
   listCategories(): Promise<CategoryOption[]>;
-  listRegions(): Promise<string[]>;
+  listRegions(collectorId?: string): Promise<string[]>;
   findDisposals(filter: ReportFilter, options?: DisposalQueryOptions): Promise<DisposalRaw[]>;
   countDisposals(filter: ReportFilter, categoryIds?: string[]): Promise<number>;
   sumByCategory(filter: ReportFilter, categoryIds?: string[]): Promise<CategoryAggregate[]>;
   sumByPoint(filter: ReportFilter, categoryIds?: string[]): Promise<PointAggregate[]>;
   findPointsByIds(ids: string[]): Promise<PointDetail[]>;
-  countActivePoints(): Promise<number>;
+  countActivePoints(collectorId?: string): Promise<number>;
+  countUsers(): Promise<number>;
+  countNewUsers(from: Date, to: Date): Promise<number>;
+  countCitizensAtCollector(collectorId: string, from: Date, to: Date): Promise<CitizenReach>;
 }

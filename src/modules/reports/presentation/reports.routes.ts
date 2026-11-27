@@ -19,7 +19,14 @@ export const reportsRoutes = Router();
  * @openapi
  * /reports/summary:
  *   get:
- *     summary: KPIs of the selected period (volume, CO2, active collection points)
+ *     summary: KPIs of the selected period (volume, CO2, active collection points, users)
+ *     description: >
+ *       Every /reports route is scoped by role: an ADMIN sees the whole platform, a COLLECTOR
+ *       only disposals made at their own collection points (the scope comes from the token, not
+ *       from the query). users.scope is "platform" for an ADMIN (total = registered users,
+ *       newInPeriod = users created in the period) and "collector" for a COLLECTOR (total =
+ *       distinct citizens with a CONFIRMED disposal at their points, newInPeriod = those whose
+ *       first one was in the period). activePoints and users ignore region/category/status.
  *     tags: [Reports]
  *     security:
  *       - bearerAuth: []

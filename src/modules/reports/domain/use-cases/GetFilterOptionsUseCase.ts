@@ -6,10 +6,10 @@ import type { IReportRepository } from "../repositories/IReportRepository";
 export class GetFilterOptionsUseCase {
   constructor(private readonly repository: IReportRepository) {}
 
-  async execute(): Promise<FilterOptions> {
+  async execute(collectorId?: string): Promise<FilterOptions> {
     const [categories, regions] = await Promise.all([
       this.repository.listCategories(),
-      this.repository.listRegions(),
+      this.repository.listRegions(collectorId),
     ]);
 
     return {

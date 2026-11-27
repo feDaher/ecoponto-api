@@ -36,6 +36,7 @@ function repositoryWith(user: User | null) {
 const firebaseManager = () =>
   ({
     setDisabled: jest.fn(async (_firebaseUid: string, _disabled: boolean) => undefined),
+    deleteUser: jest.fn(async (_firebaseUid: string) => undefined),
   }) as jest.Mocked<IFirebaseUserManager>;
 
 describe("UpdateUserRoleUseCase", () => {
