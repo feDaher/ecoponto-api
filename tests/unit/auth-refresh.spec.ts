@@ -89,6 +89,7 @@ describe("POST /auth/refresh", () => {
       idToken: "new-id-token",
       refreshToken: "new-refresh-token",
       expiresIn: "3600",
+      user: expect.objectContaining({ id: "user-citizen", role: "CITIZEN" }),
     });
   });
 
@@ -117,6 +118,10 @@ describe("GET /auth/me", () => {
       phone: "33999990003",
       city: "Manhuaçu",
       isBlocked: false,
+      nickname: "Mari",
+      notifyCollectionAlerts: true,
+      notifyMonthlyReports: false,
+      allowCooperativeContact: true,
       createdAt: new Date("2026-11-01T12:00:00.000Z"),
     });
 
@@ -132,6 +137,8 @@ describe("GET /auth/me", () => {
       phone: "33999990003",
       city: "Manhuaçu",
       createdAt: "2026-11-01T12:00:00.000Z",
+      nickname: "Mari",
+      preferences: { collectionAlerts: true, monthlyReports: false, cooperativeContact: true },
     });
   });
 });

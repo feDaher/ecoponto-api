@@ -14,6 +14,11 @@ export interface UpdateProfileData {
   name: string;
   phone: string;
   city: string;
+  nickname?: string | null;
+  notifyCollectionAlerts?: boolean;
+  notifyMonthlyReports?: boolean;
+  allowCooperativeContact?: boolean;
+  cooperativeContactConsentAt?: Date | null;
 }
 
 export interface AnonymizedUserData {
@@ -21,6 +26,9 @@ export interface AnonymizedUserData {
   email: string;
   phone: string;
   city: string;
+  nickname: null;
+  allowCooperativeContact: false;
+  cooperativeContactConsentAt: null;
 }
 
 export interface AnonymizeOptions {

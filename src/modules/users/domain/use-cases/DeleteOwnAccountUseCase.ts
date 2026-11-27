@@ -26,7 +26,15 @@ export class DeleteOwnAccountUseCase {
     try {
       const result = await this.userRepository.anonymize(
         user.id,
-        { name: ANONYMIZED_NAME, email: anonymizedEmail(user.id), phone: "", city: "" },
+        {
+          name: ANONYMIZED_NAME,
+          email: anonymizedEmail(user.id),
+          phone: "",
+          city: "",
+          nickname: null,
+          allowCooperativeContact: false,
+          cooperativeContactConsentAt: null,
+        },
         {
           keepAnotherActiveAdmin: user.role === Role.ADMIN,
           beforeCommit: async () => {

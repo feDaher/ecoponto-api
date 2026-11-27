@@ -17,6 +17,11 @@ type StoredUser = {
   city: string;
   role: Role;
   isBlocked: boolean;
+  nickname: string | null;
+  notifyCollectionAlerts: boolean;
+  notifyMonthlyReports: boolean;
+  allowCooperativeContact: boolean;
+  cooperativeContactConsentAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -33,6 +38,11 @@ function fullUser(role: Role): StoredUser {
     phone: "33988887777",
     city: "Manhuaçu",
     isBlocked: false,
+    nickname: null,
+    notifyCollectionAlerts: true,
+    notifyMonthlyReports: true,
+    allowCooperativeContact: false,
+    cooperativeContactConsentAt: null,
     createdAt: new Date("2026-10-01T12:00:00.000Z"),
     updatedAt: new Date("2026-10-01T12:00:00.000Z"),
   };
@@ -52,7 +62,10 @@ function installUserStore() {
 
   prisma.user.update.mockImplementation(
     async ({ where, data }: { where: { id: string }; data: Partial<StoredUser> }) => {
-      const updated = { ...rows.get(where.id)!, ...data, updatedAt: new Date() };
+      const defined = Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined),
+      );
+      const updated = { ...rows.get(where.id)!, ...defined, updatedAt: new Date() };
       rows.set(where.id, updated);
       return { ...updated };
     },
@@ -118,7 +131,9 @@ describe("PATCH /users/me", () => {
           "id",
           "isBlocked",
           "name",
+          "nickname",
           "phone",
+          "preferences",
           "role",
           "updatedAt",
         ].sort(),

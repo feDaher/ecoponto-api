@@ -35,6 +35,7 @@ export class RefreshSessionUseCase {
       idToken: result.idToken,
       refreshToken: result.refreshToken,
       expiresIn: result.expiresIn,
+      user,
     };
   }
 }

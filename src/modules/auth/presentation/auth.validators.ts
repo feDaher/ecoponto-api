@@ -25,3 +25,23 @@ export const loginSchema = z.object({
 export const refreshSchema = z.strictObject({
   refreshToken: z.string().trim().min(1).max(4096),
 });
+
+export const changePasswordSchema = z
+  .strictObject({
+    currentPassword: z
+      .string({ error: "Informe a senha atual" })
+      .min(1, "Informe a senha atual")
+      .max(128, "A senha atual pode ter no máximo 128 caracteres"),
+    newPassword: z
+      .string({ error: "Informe a nova senha" })
+      .min(8, "A nova senha deve ter pelo menos 8 caracteres")
+      .max(128, "A nova senha pode ter no máximo 128 caracteres")
+      .regex(/\p{L}/u, "A nova senha deve ter pelo menos uma letra")
+      .regex(/\d/, "A nova senha deve ter pelo menos um número"),
+  })
+  .refine((body) => body.newPassword !== body.currentPassword, {
+    path: ["newPassword"],
+    message: "A nova senha deve ser diferente da senha atual",
+  });
+
+export type ChangePasswordBody = z.output<typeof changePasswordSchema>;
