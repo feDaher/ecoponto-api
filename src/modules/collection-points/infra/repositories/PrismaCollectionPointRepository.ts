@@ -2,7 +2,10 @@ import { prisma } from "../../../../config/prisma";
 import { CollectionPointStatus } from "../../../../generated/prisma/enums";
 import type { Prisma } from "../../../../generated/prisma/client";
 import { toTime } from "../../../../shared/time/time-of-day";
-import type { CollectionPoint } from "../../domain/entities/CollectionPoint";
+import type {
+  CollectionPoint,
+  CollectionPointCooperativeDetails,
+} from "../../domain/entities/CollectionPoint";
 import type {
   CollectionPointWriteData,
   CreateCollectionPointData,
@@ -34,7 +37,45 @@ type PointRow = PublicPointRow &
     collector?: { id: string; name: string; email: string };
   };
 
-function toEntity(row: PointRow): CollectionPoint {
+type ConfigurationRow = Prisma.CollectionPointConfigurationGetPayload<object>;
+type CooperativeProfileRow = Prisma.CooperativeProfileGetPayload<object>;
+
+function toCooperativeDetails(
+  profile?: CooperativeProfileRow,
+  configuration?: ConfigurationRow,
+): CollectionPointCooperativeDetails | undefined {
+  if (!profile && !configuration) return undefined;
+  return {
+    cooperativeName: profile?.cooperativeName ?? "",
+    cnpj: profile?.cnpj ?? "",
+    street: configuration?.street ?? "",
+    streetNumber: configuration?.streetNumber ?? "",
+    neighborhood: configuration?.neighborhood ?? "",
+    state: configuration?.state ?? "",
+    postalCode: configuration?.postalCode ?? "",
+    email: profile?.email ?? "",
+  };
+}
+
+function toProfileData(details: CollectionPointCooperativeDetails) {
+  return {
+    cooperativeName: details.cooperativeName,
+    cnpj: details.cnpj,
+    email: details.email,
+  };
+}
+
+function toConfigurationData(details: CollectionPointCooperativeDetails) {
+  return {
+    street: details.street,
+    streetNumber: details.streetNumber,
+    neighborhood: details.neighborhood,
+    state: details.state,
+    postalCode: details.postalCode,
+  };
+}
+
+function toEntity(row: PointRow, cooperative?: CollectionPointCooperativeDetails): CollectionPoint {
   return {
     id: row.id,
     collectorId: row.collectorId,
@@ -60,67 +101,134 @@ function toEntity(row: PointRow): CollectionPoint {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     wasteCategories: row.categories.map(({ category }) => category.name).sort(),
+    ...(cooperative && { cooperative }),
     ...(row.collector && { collector: row.collector }),
   };
 }
 
 export class PrismaCollectionPointRepository implements ICollectionPointRepository {
   async create(data: CreateCollectionPointData) {
-    const point = await prisma.collectionPoint.create({
-      data: {
-        collectorId: data.collectorId,
-        name: data.name,
-        description: data.description,
-        city: data.city,
-        address: data.address,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        locationSource: data.locationSource,
-        placeId: data.placeId,
-        whatsappContact: data.whatsappContact,
-        showWhatsappContact: data.showWhatsappContact,
-        categories: { create: data.categoryIds.map((id) => ({ category: { connect: { id } } })) },
+    const cooperative = data.cooperative;
+    const pointData = {
+      collectorId: data.collectorId,
+      name: data.name,
+      description: data.description,
+      city: data.city,
+      address: data.address,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      locationSource: data.locationSource,
+      placeId: data.placeId,
+      whatsappContact: data.whatsappContact,
+      showWhatsappContact: data.showWhatsappContact,
+      categories: { create: data.categoryIds.map((id) => ({ category: { connect: { id } } })) },
+      hours: {
+        create: data.operatingHours.map(({ weekday, openTime, closeTime }) => ({
+          weekday,
+          openTime: toTime(openTime),
+          closeTime: toTime(closeTime),
+        })),
+      },
+    };
+
+    if (!cooperative) {
+      return toEntity(
+        await prisma.collectionPoint.create({ data: pointData, include: pointWithDetails }),
+      );
+    }
+
+    return prisma.$transaction(async (transaction) => {
+      const point = await transaction.collectionPoint.create({
+        data: pointData,
+        include: pointWithDetails,
+      });
+      const configuration = await transaction.collectionPointConfiguration.create({
+        data: {
+          collectionPointId: point.id,
+          ...toConfigurationData(cooperative),
+        },
+      });
+      const profile = await transaction.cooperativeProfile.upsert({
+        where: { collectorId: data.collectorId },
+        create: {
+          collectorId: data.collectorId,
+          ...toProfileData(cooperative),
+        },
+        update: toProfileData(cooperative),
+      });
+      return toEntity(point, toCooperativeDetails(profile, configuration));
+    });
+  }
+
+  async update(id: string, data: CollectionPointWriteData) {
+    const cooperative = data.cooperative;
+    const updateData = {
+      name: data.name,
+      description: data.description,
+      city: data.city,
+      address: data.address,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      locationSource: data.locationSource,
+      placeId: data.placeId,
+      whatsappContact: data.whatsappContact,
+      showWhatsappContact: data.showWhatsappContact,
+      categories: {
+        deleteMany: {},
+        create: data.categoryIds.map((categoryId) => ({
+          category: { connect: { id: categoryId } },
+        })),
+      },
+      status: CollectionPointStatus.PENDING,
+      rejectionReason: null,
+      reviewedById: null,
+      reviewedAt: null,
+      ...(data.operatingHours && {
         hours: {
+          deleteMany: {},
           create: data.operatingHours.map(({ weekday, openTime, closeTime }) => ({
             weekday,
             openTime: toTime(openTime),
             closeTime: toTime(closeTime),
           })),
         },
-      },
-      include: pointWithDetails,
-    });
-    return toEntity(point);
-  }
+        hoursConfirmedAt: new Date(),
+        isOutdated: false,
+      }),
+    };
+    const updatePoint = (client: Pick<Prisma.TransactionClient, "collectionPoint">) =>
+      client.collectionPoint.update({
+        where: { id },
+        data: updateData,
+        include: pointWithDetails,
+      });
 
-  async update(id: string, data: CollectionPointWriteData) {
-    const point = await prisma.collectionPoint.update({
-      where: { id },
-      data: {
-        name: data.name,
-        description: data.description,
-        city: data.city,
-        address: data.address,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        locationSource: data.locationSource,
-        placeId: data.placeId,
-        whatsappContact: data.whatsappContact,
-        showWhatsappContact: data.showWhatsappContact,
-        categories: {
-          deleteMany: {},
-          create: data.categoryIds.map((categoryId) => ({
-            category: { connect: { id: categoryId } },
-          })),
+    if (!cooperative && !data.operatingHours) {
+      return toEntity(await updatePoint(prisma));
+    }
+
+    return prisma.$transaction(async (transaction) => {
+      const point = await updatePoint(transaction);
+      if (!cooperative) return toEntity(point);
+
+      const configuration = await transaction.collectionPointConfiguration.upsert({
+        where: { collectionPointId: id },
+        create: {
+          collectionPointId: id,
+          ...toConfigurationData(cooperative),
         },
-        status: CollectionPointStatus.PENDING,
-        rejectionReason: null,
-        reviewedById: null,
-        reviewedAt: null,
-      },
-      include: pointWithDetails,
+        update: toConfigurationData(cooperative),
+      });
+      const profile = await transaction.cooperativeProfile.upsert({
+        where: { collectorId: data.collectorId },
+        create: {
+          collectorId: data.collectorId,
+          ...toProfileData(cooperative),
+        },
+        update: toProfileData(cooperative),
+      });
+      return toEntity(point, toCooperativeDetails(profile, configuration));
     });
-    return toEntity(point);
   }
 
   async review(id: string, data: ReviewCollectionPointData) {
@@ -159,7 +267,31 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       orderBy: { updatedAt: "desc" },
       include: pointWithDetails,
     });
-    return points.map(toEntity);
+    const configurations = points.length
+      ? await prisma.collectionPointConfiguration.findMany({
+          where: { collectionPointId: { in: points.map(({ id }) => id) } },
+        })
+      : [];
+    const profiles = points.length
+      ? await prisma.cooperativeProfile.findMany({
+          where: {
+            collectorId: { in: [...new Set(points.map(({ collectorId }) => collectorId))] },
+          },
+        })
+      : [];
+    const configurationsByPoint = new Map(
+      configurations.map((configuration) => [configuration.collectionPointId, configuration]),
+    );
+    const profilesByCollector = new Map(profiles.map((profile) => [profile.collectorId, profile]));
+    return points.map((point) =>
+      toEntity(
+        point,
+        toCooperativeDetails(
+          profilesByCollector.get(point.collectorId),
+          configurationsByPoint.get(point.id),
+        ),
+      ),
+    );
   }
 
   async listPending() {
@@ -168,6 +300,30 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
       include: { ...pointWithDetails, ...pointWithCollector },
       orderBy: { createdAt: "asc" },
     });
-    return points.map(toEntity);
+    const configurations = points.length
+      ? await prisma.collectionPointConfiguration.findMany({
+          where: { collectionPointId: { in: points.map(({ id }) => id) } },
+        })
+      : [];
+    const profiles = points.length
+      ? await prisma.cooperativeProfile.findMany({
+          where: {
+            collectorId: { in: [...new Set(points.map(({ collectorId }) => collectorId))] },
+          },
+        })
+      : [];
+    const configurationsByPoint = new Map(
+      configurations.map((configuration) => [configuration.collectionPointId, configuration]),
+    );
+    const profilesByCollector = new Map(profiles.map((profile) => [profile.collectorId, profile]));
+    return points.map((point) =>
+      toEntity(
+        point,
+        toCooperativeDetails(
+          profilesByCollector.get(point.collectorId),
+          configurationsByPoint.get(point.id),
+        ),
+      ),
+    );
   }
 }

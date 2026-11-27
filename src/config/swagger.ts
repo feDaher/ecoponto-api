@@ -28,6 +28,66 @@ const collectionPointProperties = {
       description: "Código (name) de uma categoria ativa retornada por GET /waste-categories.",
     },
   },
+  cooperative: {
+    type: "object",
+    required: [
+      "cooperativeName",
+      "cnpj",
+      "street",
+      "streetNumber",
+      "neighborhood",
+      "state",
+      "postalCode",
+      "email",
+    ],
+    properties: {
+      cooperativeName: { type: "string", example: "Cooperativa Recicla Manhuaçu" },
+      cnpj: {
+        type: "string",
+        pattern: "^[A-Z0-9]{12}[0-9]{2}$",
+        description: "CNPJ válido, com ou sem pontuação.",
+        example: "11222333000181",
+      },
+      street: { type: "string", example: "Avenida Getúlio Vargas" },
+      streetNumber: { type: "string", example: "120" },
+      neighborhood: { type: "string", example: "Centro" },
+      state: {
+        type: "string",
+        enum: [
+          "AC",
+          "AL",
+          "AP",
+          "AM",
+          "BA",
+          "CE",
+          "DF",
+          "ES",
+          "GO",
+          "MA",
+          "MT",
+          "MS",
+          "MG",
+          "PA",
+          "PB",
+          "PR",
+          "PE",
+          "PI",
+          "RJ",
+          "RN",
+          "RS",
+          "RO",
+          "RR",
+          "SC",
+          "SP",
+          "SE",
+          "TO",
+        ],
+        example: "MG",
+      },
+      postalCode: { type: "string", pattern: "^\\d{8}$", example: "36900000" },
+      email: { type: "string", format: "email", example: "contato@cooperativa.org.br" },
+    },
+  },
 };
 
 export const swaggerSpec = swaggerJsdoc({
@@ -43,7 +103,7 @@ export const swaggerSpec = swaggerJsdoc({
         CollectionPointInput: {
           type: "object",
           required: ["name", "city", "address", "wasteCategories", "operatingHours"],
-          description: `${locationDescription} Operating hours are required on registration and are stored in the OperatingHours table.`,
+          description: `${locationDescription} Operating hours are required on registration and are stored in the OperatingHours table. The cooperative configuration is optional for existing integrations.`,
           properties: {
             ...collectionPointProperties,
             operatingHours: {
@@ -72,8 +132,24 @@ export const swaggerSpec = swaggerJsdoc({
         CollectionPointUpdateInput: {
           type: "object",
           required: ["name", "city", "address", "wasteCategories"],
-          description: `${locationDescription} Operating hours are not accepted here: change them only through /collection-points/{id}/operating-hours.`,
-          properties: collectionPointProperties,
+          description: `${locationDescription} When provided, operating hours and cooperative configuration are saved together and the point is resubmitted for approval. Existing integrations may continue updating hours through /collection-points/{id}/operating-hours.`,
+          properties: {
+            ...collectionPointProperties,
+            operatingHours: {
+              type: "array",
+              minItems: 1,
+              maxItems: 28,
+              items: {
+                type: "object",
+                required: ["weekday", "openTime", "closeTime"],
+                properties: {
+                  weekday: { type: "string", enum: weekdayEnum },
+                  openTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+                  closeTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
+                },
+              },
+            },
+          },
         },
         CollectionPointHour: {
           type: "object",

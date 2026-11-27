@@ -68,6 +68,9 @@ const edit = (body: object) =>
 beforeEach(() => {
   resetPrismaMock();
   installIdentities();
+  prisma.$transaction.mockImplementation(
+    async (callback: (transaction: typeof prisma) => Promise<unknown>) => callback(prisma),
+  );
   prisma.wasteCategory.findMany.mockResolvedValue([
     { id: "category-plastic", name: "PLASTIC", active: true },
   ]);
@@ -137,12 +140,30 @@ describe("operating hours on point registration", () => {
 });
 
 describe("operating hours on point edition", () => {
-  it("rejects operatingHours on PUT with 400 instead of silently ignoring them", async () => {
+  it("replaces operating hours atomically when they are provided on PUT", async () => {
     const response = await edit(newPoint);
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain("/collection-points/{id}/operating-hours");
-    expect(prisma.collectionPoint.update).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const { data } = prisma.collectionPoint.update.mock.calls[0][0];
+    expect(data.hours).toEqual({
+      deleteMany: {},
+      create: [
+        {
+          weekday: "MONDAY",
+          openTime: new Date("1970-01-01T08:00:00.000Z"),
+          closeTime: new Date("1970-01-01T17:30:00.000Z"),
+        },
+        {
+          weekday: "SATURDAY",
+          openTime: new Date("1970-01-01T08:00:00.000Z"),
+          closeTime: new Date("1970-01-01T12:00:00.000Z"),
+        },
+      ],
+    });
+    expect(data.status).toBe("PENDING");
+    expect(data.isOutdated).toBe(false);
+    expect(data.hoursConfirmedAt).toBeInstanceOf(Date);
   });
 
   it("resubmits the point without touching its hours or the hours confirmation", async () => {

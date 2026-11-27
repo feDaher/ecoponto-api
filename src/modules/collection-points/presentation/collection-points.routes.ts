@@ -208,7 +208,7 @@ collectionPointsRoutes.get("/collection-points/:id", findApprovedById);
  *             $ref: '#/components/schemas/CollectionPointUpdateInput'
  *     responses:
  *       200:
- *         description: Updated point resubmitted for approval. Operating hours are not changed here; use /collection-points/{id}/operating-hours
+ *         description: Updated point resubmitted for approval. When operatingHours or cooperative details are provided, they are saved in the same transaction.
  *       400:
  *         description: Malformed body or unknown/inactive category
  *       401:

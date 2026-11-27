@@ -9,14 +9,15 @@ export interface CollectionPointWriteData extends Omit<
   CollectionPointDraft,
   "latitude" | "longitude" | "placeId" | "wasteCategories"
 > {
+  collectorId: string;
   latitude: number;
   longitude: number;
   locationSource: CollectionPointLocationSource;
   placeId: string | null;
   categoryIds: string[];
+  operatingHours?: CollectionPointOperatingHours[];
 }
 export interface CreateCollectionPointData extends CollectionPointWriteData {
-  collectorId: string;
   operatingHours: CollectionPointOperatingHours[];
 }
 export interface ReviewCollectionPointData {

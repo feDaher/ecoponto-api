@@ -295,3 +295,25 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
 }
+
+model CollectionPointConfiguration {
+  collectionPointId String   @id
+  street            String
+  streetNumber      String   @db.VarChar(20)
+  neighborhood      String
+  state             String   @db.Char(2)
+  postalCode        String   @db.VarChar(8)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model CooperativeProfile {
+  collectorId     String   @id
+  cooperativeName String
+  cnpj            String   @db.VarChar(14)
+  email           String   @db.VarChar(254)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cnpj])
+}
