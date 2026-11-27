@@ -40,7 +40,7 @@ export const auditLogRoutes = Router();
  *         required: false
  *         schema:
  *           type: string
- *           enum: [ACCESS_DENIED, RESOURCE_CHANGED]
+ *           enum: [ACCESS_DENIED, RESOURCE_CHANGED, AUDIT_LOG_VIEWED]
  *         description: Filter audit logs by action type
  *       - in: query
  *         name: userId
