@@ -107,6 +107,9 @@ collectionPointsRoutes.get(
  * /collection-points/mine:
  *   get:
  *     summary: List the authenticated collector's points
+ *     description: >
+ *       Oldest point first (createdAt ascending), so the first item stays the same when another
+ *       point is edited. An empty array means the collector has no point yet.
  *     tags: [Collection Points]
  *     security: [{ bearerAuth: [] }]
  *     responses:

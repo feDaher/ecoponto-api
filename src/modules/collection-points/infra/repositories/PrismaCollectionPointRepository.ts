@@ -207,7 +207,7 @@ export class PrismaCollectionPointRepository implements ICollectionPointReposito
   async listMine(collectorId: string) {
     const points = await prisma.collectionPoint.findMany({
       where: { collectorId },
-      orderBy: { updatedAt: "desc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: pointWithDetails,
     });
     // The owner needs to tell approved categories from those still waiting for an admin (BE-21).

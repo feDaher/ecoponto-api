@@ -252,6 +252,21 @@ describe("collection point category persistence", () => {
     expect(response.body[0]).not.toHaveProperty("categoryApprovals");
   });
 
+  it("lists the collector's points oldest first, so the first point is stable", async () => {
+    prisma.collectionPoint.findMany.mockResolvedValue([]);
+
+    const response = await request(app).get("/collection-points/mine").set(bearer(Role.COLLECTOR));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+    expect(prisma.collectionPoint.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { collectorId: users[Role.COLLECTOR].id },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }),
+    );
+  });
+
   it("rejects an inactive or unknown wasteType filter", async () => {
     prisma.wasteCategory.findMany.mockResolvedValue([]);
 
