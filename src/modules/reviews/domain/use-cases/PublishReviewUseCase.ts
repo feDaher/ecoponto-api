@@ -42,12 +42,11 @@ export class PublishReviewUseCase {
       return { review, created: false };
     }
 
-    const review = await this.reviewRepository.create({
+    return this.reviewRepository.create({
       citizenId,
       collectionPointId,
       rating,
       comment,
     });
-    return { review, created: true };
   }
 }

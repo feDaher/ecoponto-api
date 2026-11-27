@@ -326,6 +326,7 @@ model Review {
   @@index([citizenId])
   @@index([collectionPointId])
   @@index([collectionPointId, createdAt])
+  @@unique([citizenId, collectionPointId])
 }
 
 model AuditLog {

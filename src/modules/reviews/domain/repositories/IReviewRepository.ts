@@ -22,7 +22,10 @@ export interface IReviewRepository {
   findForModeration(filters: ModerationFilters, page: PageRequest): Promise<Page<ModerationReview>>;
   /** Avaliação do cidadão para o ponto, se houver (RB12: uma por cidadão por ponto). */
   findOwnReviewId(citizenId: string, collectionPointId: string): Promise<string | null>;
-  create(review: NewReview): Promise<PublicReview>;
+  create(review: NewReview): Promise<{
+    review: PublicReview;
+    created: boolean;
+  }>;
   updateContent(id: string, content: Pick<NewReview, "rating" | "comment">): Promise<PublicReview>;
   exists(id: string): Promise<boolean>;
   setHidden(id: string, isHidden: boolean): Promise<ModerationReview>;

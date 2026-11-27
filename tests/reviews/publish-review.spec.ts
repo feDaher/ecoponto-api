@@ -20,7 +20,7 @@ const savedRow = (rating: number, comment: string | null) => ({
 
 const publish = (body: object, role: Role = Role.CITIZEN) =>
   request(app).post(`/collection-points/${POINT_ID}/reviews`).set(bearer(role)).send(body);
-
+const flushAudit = () => new Promise((resolve) => setImmediate(resolve));
 beforeEach(() => {
   resetPrismaMock();
   installIdentities();
@@ -87,5 +87,109 @@ describe("POST /collection-points/:id/reviews (RB12)", () => {
   it("does not accept a citizenId from the client", async () => {
     const response = await publish({ rating: 4, citizenId: "someone-else" });
     expect(response.status).toBe(400);
+  });
+  it("records the review creation in the audit trail", async () => {
+    prisma.review.create.mockResolvedValue(savedRow(5, "Teste"));
+
+    const response = await publish({ rating: 5, comment: "Teste" });
+    await flushAudit();
+
+    expect(response.status).toBe(201);
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: "user-citizen",
+        action: "RESOURCE_CHANGED",
+        method: "POST",
+        route: "/collection-points/:id/reviews",
+        resourceId: REVIEW_ID,
+        statusCode: 201,
+      }),
+    });
+  });
+  it("records the review update in the audit trail", async () => {
+    prisma.review.findFirst.mockResolvedValue({ id: REVIEW_ID });
+    prisma.review.update.mockResolvedValue(savedRow(4, "Atualizado"));
+
+    const response = await publish({ rating: 4, comment: "Atualizado" });
+    await flushAudit();
+
+    expect(response.status).toBe(200);
+
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: "user-citizen",
+        action: "RESOURCE_CHANGED",
+        method: "POST",
+        route: "/collection-points/:id/reviews",
+        resourceId: REVIEW_ID,
+        statusCode: 200,
+      }),
+    });
+  });
+
+  it("updates the existing review after a concurrent creation conflict", async () => {
+    prisma.review.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: REVIEW_ID });
+
+    prisma.review.create.mockRejectedValueOnce(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+      }),
+    );
+
+    prisma.review.update.mockResolvedValue(savedRow(4, "Avaliação atualizada"));
+
+    const response = await publish({
+      rating: 4,
+      comment: "Avaliação atualizada",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.id).toBe(REVIEW_ID);
+    expect(response.body.rating).toBe(4);
+
+    expect(prisma.review.create).toHaveBeenCalledTimes(1);
+    expect(prisma.review.findFirst).toHaveBeenCalledTimes(2);
+
+    expect(prisma.review.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: REVIEW_ID },
+        data: {
+          rating: 4,
+          comment: "Avaliação atualizada",
+        },
+      }),
+    );
+  });
+
+  it("does not recover a unique conflict without a matching review", async () => {
+    prisma.review.findFirst.mockResolvedValue(null);
+
+    prisma.review.create.mockRejectedValueOnce(
+      Object.assign(new Error("Unique constraint failed"), {
+        code: "P2002",
+      }),
+    );
+
+    const response = await publish({ rating: 4 });
+
+    expect(response.status).toBe(500);
+    expect(prisma.review.update).not.toHaveBeenCalled();
+  });
+
+  it("propagates database errors unrelated to unique constraints", async () => {
+    prisma.review.findFirst.mockResolvedValue(null);
+
+    prisma.review.create.mockRejectedValueOnce(
+      Object.assign(new Error("Database error"), {
+        code: "P2024",
+      }),
+    );
+
+    const response = await publish({ rating: 4 });
+
+    expect(response.status).toBe(500);
+    expect(prisma.review.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.review.update).not.toHaveBeenCalled();
   });
 });
