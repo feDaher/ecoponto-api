@@ -191,6 +191,24 @@ describe("GET /admin/audit-logs", () => {
     );
   });
 
+  it("filters audit logs by audit-log views", async () => {
+    prisma.auditLog.findMany.mockResolvedValue([]);
+
+    const response = await request(app)
+      .get("/admin/audit-logs")
+      .query({ action: "AUDIT_LOG_VIEWED" })
+      .set(bearer(Role.ADMIN));
+
+    expect(response.status).toBe(200);
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([expect.objectContaining({ action: "AUDIT_LOG_VIEWED" })]),
+        }),
+      }),
+    );
+  });
+
   it("filters audit logs by userId", async () => {
     const userId = "11111111-1111-4111-8111-111111111111";
 

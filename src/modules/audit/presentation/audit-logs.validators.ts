@@ -8,7 +8,9 @@ const MAX_PERIOD_MS = MAX_PERIOD_DAYS * 24 * 60 * 60 * 1000;
 
 export const listAuditLogsQuerySchema = z
   .strictObject({
-    action: z.enum([AuditAction.ACCESS_DENIED, AuditAction.RESOURCE_CHANGED]).optional(),
+    action: z
+      .enum([AuditAction.ACCESS_DENIED, AuditAction.RESOURCE_CHANGED, AuditAction.AUDIT_LOG_VIEWED])
+      .optional(),
     userId: z.uuid().optional(),
     route: z.string().trim().min(1).max(191).optional(),
     limit: z.coerce.number().int().min(1).max(100).default(20),
