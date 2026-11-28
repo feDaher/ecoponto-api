@@ -48,3 +48,18 @@ describe("CORS_ORIGINS", () => {
     ).toEqual(["https://a.example", "https://b.example"]);
   });
 });
+
+describe("FIREBASE_PRIVATE_KEY", () => {
+  const pem = "-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----\n";
+  const escaped = pem.replace(/\n/g, "\n");
+
+  it.each([
+    ["real line breaks", pem],
+    ["escaped line breaks", escaped],
+    ["double quotes around it (Docker --env-file, deploy panels)", `"${escaped}"`],
+    ["single quotes around it", `'${escaped}'`],
+    ["surrounding blank space", `  ${escaped}  `],
+  ])("accepts the key with %s", (_label, raw) => {
+    expect(loadEnv({ FIREBASE_PRIVATE_KEY: raw }).FIREBASE_PRIVATE_KEY).toBe(pem.trim());
+  });
+});

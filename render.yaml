@@ -1,0 +1,41 @@
+# Blueprint do Render: deploy de TESTE da API (plano gratuito).
+# Guia passo a passo: deploy/VERCEL-RENDER.md
+# Os valores com "sync: false" são segredos: o Render pede no painel e eles nunca ficam no Git.
+services:
+  - type: web
+    name: ecoponto-api
+    runtime: docker
+    plan: free
+    region: virginia
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # O Render coloca um proxy na frente da API: 1 salto, para o rate limit ver o IP real.
+      - key: TRUST_PROXY
+        value: "1"
+      # Banco novo no TiDB: cria a estrutura pelo schema na primeira subida (ver scripts/deploy/start.mjs).
+      - key: DB_BOOTSTRAP_FROM_SCHEMA
+        value: "true"
+      # Poucas conexões bastam no plano gratuito (512 MB) e poupam o TiDB.
+      - key: DB_POOL_LIMIT
+        value: "5"
+      - key: DATABASE_URL
+        sync: false
+      # Endereço de produção da Vercel, sem barra no final.
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
+      # Opcional: sem ela, a busca de endereço (/places) responde 503 e o resto funciona.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false

@@ -48,7 +48,18 @@ const envSchema = z.object({
     ),
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().min(1),
-  FIREBASE_PRIVATE_KEY: z.string().min(1),
+  // Painéis de deploy (Render, Docker --env-file) não removem aspas nem convertem "\n" como o
+  // dotenv faz: aceita a chave colada com ou sem aspas e com quebras de linha reais ou escapadas.
+  FIREBASE_PRIVATE_KEY: z
+    .string()
+    .trim()
+    .transform((value) =>
+      value
+        .replace(/^(["'])([\s\S]*)\1$/, "$2")
+        .replace(/\\n/g, "\n")
+        .trim(),
+    )
+    .pipe(z.string().min(1)),
   FIREBASE_API_KEY: z.string().min(1),
   // Server-side key for Places API (New). Optional so the API still boots without it;
   // the /places routes answer 503 until it is set. Never expose it to the web/mobile apps.
