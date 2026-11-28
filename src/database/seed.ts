@@ -4,7 +4,14 @@ import { prisma } from "../config/prisma";
 import { Role, WasteClass } from "../generated/prisma/enums";
 import { seedDemoData } from "./seed-demo";
 
-const SEED_PASSWORD = "Ecoponto@123";
+// Senha das contas criadas no Firebase. Localmente é a senha conhecida da turma; num deploy
+// público, defina SEED_PASSWORD com uma senha forte (ela não é impressa no terminal).
+const DEFAULT_SEED_PASSWORD = "Ecoponto@123";
+const customSeedPassword = process.env.SEED_PASSWORD?.trim();
+if (customSeedPassword !== undefined && customSeedPassword.length < 12) {
+  throw new Error("SEED_PASSWORD must have at least 12 characters");
+}
+const SEED_PASSWORD = customSeedPassword || DEFAULT_SEED_PASSWORD;
 
 const seedUsers = [
   {
@@ -174,7 +181,11 @@ async function main() {
     citizenId: accountIds.get(Role.CITIZEN)!,
   });
 
-  console.log(`\nSeed concluído. Senha das contas de teste: ${SEED_PASSWORD}`);
+  console.log(
+    customSeedPassword
+      ? "\nSeed concluído. As contas novas usam a senha definida em SEED_PASSWORD."
+      : `\nSeed concluído. Senha das contas de teste: ${SEED_PASSWORD}`,
+  );
 }
 
 main()
