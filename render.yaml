@@ -23,6 +23,12 @@ services:
       # Poucas conexões bastam no plano gratuito (512 MB) e poupam o TiDB.
       - key: DB_POOL_LIMIT
         value: "5"
+      # O TiDB Starter dorme quando fica parado: a primeira consulta depois disso espera ele acordar
+      # (até 20 s para conectar) em vez de responder erro 500.
+      - key: DB_CONNECT_TIMEOUT_MS
+        value: "20000"
+      - key: DB_POOL_ACQUIRE_TIMEOUT_MS
+        value: "30000"
       - key: DATABASE_URL
         sync: false
       # Endereço de produção da Vercel, sem barra no final.

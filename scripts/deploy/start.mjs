@@ -24,10 +24,34 @@ function runPrisma(...args) {
   }
 }
 
-async function readDatabaseState() {
+// O TiDB Starter dorme quando fica parado e leva alguns segundos para acordar: o padrão do
+// driver (1 s) não basta, então a primeira conexão espera mais e tenta de novo.
+const CONNECT_TIMEOUT_MS = 30_000;
+const CONNECT_ATTEMPTS = 5;
+const RETRY_DELAY_MS = 5_000;
+
+async function connectWithRetry() {
   const url = new URL(process.env.DATABASE_URL ?? "");
   url.protocol = "mariadb:";
-  const connection = await mariadb.createConnection(url.toString());
+  if (!url.searchParams.has("connectTimeout")) {
+    url.searchParams.set("connectTimeout", String(CONNECT_TIMEOUT_MS));
+  }
+
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await mariadb.createConnection(url.toString());
+    } catch (error) {
+      if (attempt >= CONNECT_ATTEMPTS) throw error;
+      console.warn(
+        `[deploy] Banco ainda indisponível (tentativa ${attempt}/${CONNECT_ATTEMPTS}): ${error.code ?? error.message}. Nova tentativa em ${RETRY_DELAY_MS / 1000} s.`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+}
+
+async function readDatabaseState() {
+  const connection = await connectWithRetry();
   try {
     const [row] = await connection.query(
       `SELECT COUNT(*) AS total, COALESCE(SUM(table_name = '_prisma_migrations'), 0) AS history
