@@ -41,7 +41,10 @@ async function connectWithRetry() {
     try {
       return await mariadb.createConnection(url.toString());
     } catch (error) {
-      if (attempt >= CONNECT_ATTEMPTS) throw error;
+      // Erro devolvido pelo próprio servidor (senha errada, banco inexistente…): esperar não resolve.
+      const serverError =
+        typeof error.errno === "number" && error.errno >= 1000 && error.errno < 10000;
+      if (serverError || attempt >= CONNECT_ATTEMPTS) throw error;
       console.warn(
         `[deploy] Banco ainda indisponível (tentativa ${attempt}/${CONNECT_ATTEMPTS}): ${error.code ?? error.message}. Nova tentativa em ${RETRY_DELAY_MS / 1000} s.`,
       );
